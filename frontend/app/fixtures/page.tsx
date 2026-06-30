@@ -75,6 +75,7 @@ export default function FixturesPage() {
     <div>
       <h1>Partidos — Mundial 2026</h1>
       {err && <p className="err">{err}</p>}
+      {!err && fixtures.length === 0 && <p className="muted">No hay fixtures cargados todavía.</p>}
       {fixtures.map((fx) => (
         <div className="card" key={fx.id}>
           <div className="row" onClick={() => setOpen(open === fx.id ? null : fx.id)} style={{ cursor: "pointer" }}>

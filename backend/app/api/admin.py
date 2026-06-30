@@ -15,6 +15,7 @@ from ..db.models import User, Fixture, FixtureStatus, UserPrediction, Prediction
 from ..ml.inference import inference
 from ..ml.markets import market_1x2, market_over_under, market_btts
 from .deps import require_admin
+from ..services.api_football import sync_world_cup_fixtures
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
@@ -104,3 +105,36 @@ def audit_tail(
          "resource": r.resource, "detail": r.detail, "at": r.created_at}
         for r in rows
     ]
+
+
+@router.post("/fixtures/sync")
+def sync_fixtures(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = sync_world_cup_fixtures(db)
+    except Exception as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"falló sync football-data.org: {e}")
+
+    db.add(AuditLog(
+        actor_id=admin.id,
+        action="sync_fixtures",
+        resource="world_cup_2026",
+        detail={
+            "imported": result.imported,
+            "inserted": result.inserted,
+            "updated": result.updated,
+            "competition_code": result.competition_code,
+            "season": result.season,
+        },
+    ))
+    db.commit()
+    return {
+        "ok": True,
+        "imported": result.imported,
+        "inserted": result.inserted,
+        "updated": result.updated,
+        "competition_code": result.competition_code,
+        "season": result.season,
+    }

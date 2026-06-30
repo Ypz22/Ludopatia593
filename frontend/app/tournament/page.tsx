@@ -18,7 +18,9 @@ export default function TournamentPage() {
   return (
     <div>
       <h1>Probabilidad de campeón</h1>
-      <p className="muted">Monte Carlo · {data.n_sims.toLocaleString()} simulaciones · estructura de grupos estimada</p>
+      <p className="muted">
+        Monte Carlo · {data.n_sims.toLocaleString()} simulaciones · fuente {data.source ?? "desconocida"} · {data.group_count ?? 0} grupos
+      </p>
       <div className="card">
         <table>
           <thead><tr><th>#</th><th>Selección</th><th>Campeón</th><th>Finalista</th><th>Avanza grupo</th></tr></thead>

@@ -10,7 +10,7 @@ calibrado, expone cuotas justas + valor esperado, y permite predicciones con
 - **Sin dinero real** — solo predicción/simulación con puntos virtuales.
 - **Sin compliance regulatorio** — proyecto no publicado (académico).
 - **Datos gratis** — Dixon-Coles entrenado con históricos abiertos (Kaggle); el
-  pipeline corre con dataset sintético si no hay CSV. API-Football (plan free) es
+  pipeline corre con dataset sintético si no hay CSV. `football-data.org` es
   opcional solo para fixtures.
 
 ## Arquitectura
@@ -118,7 +118,7 @@ Sobre históricos reales (Kaggle), donde sí hay señal, el blend mejora calibra
 
 ## Pendiente
 
-- ETL real API-Football con presupuesto de cuota diaria.
+- ETL real desde `football-data.org` para fixtures del Mundial.
 - Serializar el GBM y exponer el blend en el endpoint de predicción en vivo.
 
 ## Descargo

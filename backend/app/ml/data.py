@@ -19,26 +19,72 @@ from datetime import datetime, timedelta
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 RESULTS_CSV = DATA_DIR / "results.csv"
 
-# Subconjunto de selecciones para el demo sintético (clasificadas/históricas top).
-SYNTH_TEAMS = [
-    "Argentina", "France", "Brazil", "England", "Spain", "Portugal",
-    "Netherlands", "Germany", "Belgium", "Croatia", "Uruguay", "Mexico",
-    "USA", "Morocco", "Japan", "Senegal", "Ecuador", "Colombia",
-    "Denmark", "Switzerland",
-]
+# Subconjunto de selecciones con priors plausibles para el fallback sintético.
+SYNTH_TEAM_STRENGTHS = {
+    "Argentina": (0.75, -0.55),
+    "Australia": (0.08, 0.08),
+    "Austria": (0.14, 0.04),
+    "Belgium": (0.44, -0.22),
+    "Brazil": (0.68, -0.48),
+    "Cameroon": (0.02, 0.12),
+    "Canada": (0.10, 0.10),
+    "Chile": (0.05, 0.12),
+    "Colombia": (0.26, -0.10),
+    "Costa Rica": (-0.02, 0.18),
+    "Croatia": (0.38, -0.18),
+    "Czech Republic": (0.10, 0.08),
+    "Denmark": (0.18, -0.02),
+    "Ecuador": (0.12, 0.02),
+    "Egypt": (0.02, 0.10),
+    "England": (0.62, -0.40),
+    "France": (0.72, -0.52),
+    "Germany": (0.48, -0.28),
+    "Ghana": (0.00, 0.14),
+    "Iran": (0.10, 0.06),
+    "Italy": (0.40, -0.22),
+    "Japan": (0.24, -0.08),
+    "Mexico": (0.20, -0.05),
+    "Morocco": (0.28, -0.12),
+    "Netherlands": (0.50, -0.30),
+    "Nigeria": (0.06, 0.12),
+    "Norway": (0.10, 0.10),
+    "Panama": (-0.05, 0.20),
+    "Paraguay": (0.04, 0.12),
+    "Peru": (0.06, 0.10),
+    "Poland": (0.10, 0.08),
+    "Portugal": (0.55, -0.35),
+    "Saudi Arabia": (-0.02, 0.18),
+    "Scotland": (0.08, 0.12),
+    "Senegal": (0.18, -0.03),
+    "Serbia": (0.08, 0.10),
+    "South Korea": (0.08, 0.10),
+    "Spain": (0.60, -0.42),
+    "Sweden": (0.08, 0.10),
+    "Uruguay": (0.36, -0.16),
+    "USA": (0.22, -0.04),
+    "Switzerland": (0.16, 0.00),
+    "Turkey": (0.14, 0.04),
+    "Ukraine": (0.10, 0.08),
+    "Wales": (0.06, 0.12),
+}
 
 
 def _synthetic(n_matches: int = 4000, seed: int = 42) -> pd.DataFrame:
     """Genera partidos sintéticos con fuerzas latentes -> Poisson realista."""
     rng = np.random.default_rng(seed)
-    # fuerza latente por equipo (ataque, defensa)
-    strength = {t: (rng.normal(0.2, 0.35), rng.normal(0.2, 0.35)) for t in SYNTH_TEAMS}
+    strength = {
+        team: (
+            atk + rng.normal(0.0, 0.05),
+            dfc + rng.normal(0.0, 0.05),
+        )
+        for team, (atk, dfc) in SYNTH_TEAM_STRENGTHS.items()
+    }
     home_adv = 0.28
 
     rows = []
     base = datetime(2018, 1, 1)
     for k in range(n_matches):
-        h, a = rng.choice(SYNTH_TEAMS, size=2, replace=False)
+        h, a = rng.choice(list(SYNTH_TEAM_STRENGTHS), size=2, replace=False)
         atk_h, dfc_h = strength[h]
         atk_a, dfc_a = strength[a]
         lam_h = np.exp(atk_h - dfc_a + home_adv)

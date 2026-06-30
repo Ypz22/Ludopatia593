@@ -4,6 +4,7 @@ Pydantic valida tipos al arranque -> falla rápido si falta config crítica.
 """
 from __future__ import annotations
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,9 +27,23 @@ class Settings(BaseSettings):
     rate_limit_per_min: int = 60
     login_rate_limit_per_min: int = 5
 
-    # API-Football (plan free). Vacío => ETL usa dataset local.
-    api_football_key: str = ""
-    api_football_base: str = "https://v3.football.api-sports.io"
+    # football-data.org. Vacío => ETL usa dataset local.
+    football_data_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("FOOTBALL_DATA_API_KEY", "API_FOOTBALL_KEY"),
+    )
+    football_data_base: str = Field(
+        default="https://api.football-data.org/v4",
+        validation_alias=AliasChoices("FOOTBALL_DATA_BASE", "API_FOOTBALL_BASE"),
+    )
+    football_data_competition_code: str = Field(
+        default="WC",
+        validation_alias=AliasChoices("FOOTBALL_DATA_COMPETITION_CODE"),
+    )
+    football_data_season: int = Field(
+        default=2026,
+        validation_alias=AliasChoices("FOOTBALL_DATA_SEASON", "API_FOOTBALL_SEASON"),
+    )
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
