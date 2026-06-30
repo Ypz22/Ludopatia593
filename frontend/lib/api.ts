@@ -1,7 +1,12 @@
 "use client";
-// Cliente API. Llama al backend vía el proxy /api (rewrite en next.config.js).
+// Cliente API. El navegador llama al backend directo (puerto publicado).
+// CORS lo habilita el backend para http://localhost:3000.
 // Token en localStorage para demo. NOTA seguridad: en producción, refresh token
 // debería ir en cookie HttpOnly; aquí se simplifica por ser proyecto académico.
+
+// NEXT_PUBLIC_* se hornea en build; default localhost:8000 sirve en Docker (puerto
+// publicado, el navegador corre en el host) y en dev local.
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const TOKEN_KEY = "access_token";
 const REFRESH_KEY = "refresh_token";
@@ -25,7 +30,7 @@ async function req(path: string, opts: RequestInit = {}, auth = false) {
     const t = getToken();
     if (t) headers["Authorization"] = `Bearer ${t}`;
   }
-  const res = await fetch(`/api${path}`, { ...opts, headers });
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers });
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail; } catch {}
