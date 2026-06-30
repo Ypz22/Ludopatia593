@@ -76,7 +76,7 @@ class Fixture(Base):
     __tablename__ = "fixtures"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    external_id: Mapped[str | None] = mapped_column(String(40), unique=True)  # id API-Football
+    external_id: Mapped[str | None] = mapped_column(String(40), unique=True)  # id proveedor externo
     stage: Mapped[str] = mapped_column(String(40))  # group_a, round_16, ...
     home_team: Mapped[str] = mapped_column(String(100))
     away_team: Mapped[str] = mapped_column(String(100))

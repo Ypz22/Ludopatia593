@@ -12,7 +12,9 @@ from datetime import datetime, timezone, timedelta
 from .db.session import Base, engine, SessionLocal
 from .db.models import User, Team, Fixture, FixtureStatus, Role
 from .core.security import hash_password
+from .core.config import settings
 from .ml.inference import inference
+from .services.api_football import sync_world_cup_fixtures
 
 DEMO_FIXTURES = [
     ("group_a", "Argentina", "Mexico"),
@@ -42,16 +44,28 @@ def main():
             if not db.query(Team).filter(Team.name == name).first():
                 db.add(Team(name=name))
 
-        # fixtures demo
-        base = datetime.now(timezone.utc) + timedelta(days=1)
-        for i, (stage, h, a) in enumerate(DEMO_FIXTURES):
-            ext = f"demo-{i}"
-            if not db.query(Fixture).filter(Fixture.external_id == ext).first():
-                db.add(Fixture(
-                    external_id=ext, stage=stage, home_team=h, away_team=a,
-                    kickoff_utc=base + timedelta(hours=3 * i), neutral=True,
-                    status=FixtureStatus.scheduled,
-                ))
+        seeded_real = False
+        if settings.football_data_api_key:
+            try:
+                result = sync_world_cup_fixtures(db)
+                seeded_real = result.imported > 0
+                print(
+                    f"sync football-data.org ok: {result.imported} fixtures "
+                    f"(competencia {result.competition_code}, temporada {result.season})"
+                )
+            except Exception as e:
+                print(f"sync football-data.org falló, usando demo: {e}")
+
+        if not seeded_real:
+            base = datetime.now(timezone.utc) + timedelta(days=1)
+            for i, (stage, h, a) in enumerate(DEMO_FIXTURES):
+                ext = f"demo-{i}"
+                if not db.query(Fixture).filter(Fixture.external_id == ext).first():
+                    db.add(Fixture(
+                        external_id=ext, stage=stage, home_team=h, away_team=a,
+                        kickoff_utc=base + timedelta(hours=3 * i), neutral=True,
+                        status=FixtureStatus.scheduled,
+                    ))
         db.commit()
         print(f"seed ok: {db.query(Team).count()} equipos, {db.query(Fixture).count()} fixtures")
     finally:
