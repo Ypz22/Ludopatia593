@@ -19,17 +19,14 @@ from scipy.optimize import minimize
 from scipy.stats import poisson
 
 
-def _tau(home_goals: int, away_goals: int, lambda_h: float, lambda_a: float, rho: float) -> float:
-    """Factor de corrección Dixon-Coles para marcadores bajos."""
-    if home_goals == 0 and away_goals == 0:
-        return 1.0 - lambda_h * lambda_a * rho
-    if home_goals == 0 and away_goals == 1:
-        return 1.0 + lambda_h * rho
-    if home_goals == 1 and away_goals == 0:
-        return 1.0 + lambda_a * rho
-    if home_goals == 1 and away_goals == 1:
-        return 1.0 - rho
-    return 1.0
+def _tau_vec(hg: np.ndarray, ag: np.ndarray, lh: np.ndarray, la: np.ndarray, rho: float) -> np.ndarray:
+    """Factor de corrección Dixon-Coles vectorizado (sin loop Python)."""
+    tau = np.ones(len(hg))
+    tau = np.where((hg == 0) & (ag == 0), 1.0 - lh * la * rho, tau)
+    tau = np.where((hg == 0) & (ag == 1), 1.0 + lh * rho, tau)
+    tau = np.where((hg == 1) & (ag == 0), 1.0 + la * rho, tau)
+    tau = np.where((hg == 1) & (ag == 1), 1.0 - rho, tau)
+    return tau
 
 
 @dataclass
@@ -95,10 +92,7 @@ class DixonColesModel:
                 + poisson.logpmf(ag, lam_a)
             )
             # término tau (puede ser <=0 para rho extremo -> clip)
-            tau = np.array(
-                [_tau(h, a, lh, la, rho) for h, a, lh, la in zip(hg, ag, lam_h, lam_a)]
-            )
-            tau = np.clip(tau, 1e-10, None)
+            tau = np.clip(_tau_vec(hg, ag, lam_h, lam_a, rho), 1e-10, None)
             ll = ll + np.log(tau)
             return -np.sum(weights * ll)
 
@@ -150,10 +144,12 @@ class DixonColesModel:
         pa = poisson.pmf(np.arange(m), lam_a)
         mat = np.outer(ph, pa)
 
-        # corrección tau solo afecta esquina baja
-        for i in (0, 1):
-            for j in (0, 1):
-                mat[i, j] *= _tau(i, j, lam_h, lam_a, self.rho)
+        # corrección tau solo afecta esquina baja (2x2 cases, inline)
+        rho = self.rho
+        mat[0, 0] *= 1.0 - lam_h * lam_a * rho
+        mat[0, 1] *= 1.0 + lam_h * rho
+        mat[1, 0] *= 1.0 + lam_a * rho
+        mat[1, 1] *= 1.0 - rho
 
         mat = mat / mat.sum()
         return mat

@@ -12,4 +12,4 @@ COPY --from=build /app ./
 RUN addgroup -S app && adduser -S app -G app && chown -R app /app
 USER app
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["sh", "-c", "npm start -- -p ${PORT:-3000}"]

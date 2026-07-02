@@ -4,7 +4,7 @@ Pydantic valida tipos al arranque -> falla rápido si falta config crítica.
 """
 from __future__ import annotations
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,7 +45,29 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("FOOTBALL_DATA_SEASON", "API_FOOTBALL_SEASON"),
     )
 
+    # CORS_ORIGINS puede ser JSON ["url1","url2"] o comma-separated "url1,url2"
     cors_origins: list[str] = ["http://localhost:3000"]
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def fix_postgres_url(cls, v: str) -> str:
+        # Railway entrega postgres:// o postgresql:// sin driver spec
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+psycopg2://", 1)
+        if v.startswith("postgresql://") and "+psycopg2" not in v:
+            return v.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return v
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: object) -> list[str]:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                import json
+                return json.loads(v)
+            return [o.strip() for o in v.split(",") if o.strip()]
+        return v
 
 
 settings = Settings()

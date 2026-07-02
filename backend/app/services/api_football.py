@@ -22,19 +22,29 @@ REAL_FIXTURE_PREFIX = "football-data:"
 LEGACY_REAL_FIXTURE_PREFIXES = ("football-data:", "api-football:")
 
 TEAM_ALIASES = {
-    "United States": "USA",
-    "United States of America": "USA",
-    "USA": "USA",
+    # USA — Kaggle CSV usa "United States"
+    "United States": "United States",
+    "United States of America": "United States",
+    "USA": "United States",
     "Mexico": "Mexico",
     "IR Iran": "Iran",
     "Korea Republic": "South Korea",
     "South Korea": "South Korea",
     "Korea DPR": "North Korea",
+    # Bosnia — football-data.org envía "Bosnia-Herzegovina" (con guion)
     "Bosnia & Herzegovina": "Bosnia and Herzegovina",
+    "Bosnia-Herzegovina": "Bosnia and Herzegovina",
     "Czechia": "Czech Republic",
     "Türkiye": "Turkey",
-    "DR Congo": "Congo DR",
-    "Ivory Coast": "Cote d'Ivoire",
+    # DR Congo — Kaggle CSV usa "DR Congo" (no "Congo DR")
+    "DR Congo": "DR Congo",
+    "Congo DR": "DR Congo",
+    # Ivory Coast — Kaggle CSV usa "Ivory Coast" (no "Cote d'Ivoire")
+    "Ivory Coast": "Ivory Coast",
+    "Cote d'Ivoire": "Ivory Coast",
+    # Cape Verde — Kaggle CSV usa "Cape Verde" (no "Cape Verde Islands")
+    "Cape Verde Islands": "Cape Verde",
+    "Cape Verde": "Cape Verde",
 }
 
 _ROUND_MAP = {

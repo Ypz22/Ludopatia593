@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_
+from sqlalchemy import case, or_
 from sqlalchemy.orm import Session
 
 from ..db.session import get_db
@@ -41,7 +41,12 @@ def list_fixtures(
         ))
     if stage:
         q = q.filter(Fixture.stage == stage)
-    return q.order_by(Fixture.kickoff_utc).limit(200).all()
+    status_order = case(
+        (Fixture.status == "live", 0),
+        (Fixture.status == "scheduled", 1),
+        else_=2,
+    )
+    return q.order_by(status_order, Fixture.kickoff_utc).limit(200).all()
 
 
 @router.get("/fixtures/{fixture_id}/prediction")

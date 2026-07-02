@@ -61,7 +61,7 @@ SYNTH_TEAM_STRENGTHS = {
     "Spain": (0.60, -0.42),
     "Sweden": (0.08, 0.10),
     "Uruguay": (0.36, -0.16),
-    "USA": (0.22, -0.04),
+    "United States": (0.22, -0.04),
     "Switzerland": (0.16, 0.00),
     "Turkey": (0.14, 0.04),
     "Ukraine": (0.10, 0.08),
