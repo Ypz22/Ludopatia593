@@ -45,8 +45,20 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("FOOTBALL_DATA_SEASON", "API_FOOTBALL_SEASON"),
     )
 
-    # CORS_ORIGINS puede ser JSON ["url1","url2"] o comma-separated "url1,url2"
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # CORS_ORIGINS: JSON array '["url1","url2"]', comma-separated "url1,url2", o "*"
+    cors_origins_raw: str = Field(
+        default="http://localhost:3000",
+        alias="CORS_ORIGINS",
+        validation_alias=AliasChoices("CORS_ORIGINS", "cors_origins"),
+    )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        v = self.cors_origins_raw.strip()
+        if v.startswith("["):
+            import json
+            return json.loads(v)
+        return [o.strip() for o in v.split(",") if o.strip()]
 
     @field_validator("database_url", mode="before")
     @classmethod
@@ -56,17 +68,6 @@ class Settings(BaseSettings):
             return v.replace("postgres://", "postgresql+psycopg2://", 1)
         if v.startswith("postgresql://") and "+psycopg2" not in v:
             return v.replace("postgresql://", "postgresql+psycopg2://", 1)
-        return v
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: object) -> list[str]:
-        if isinstance(v, str):
-            v = v.strip()
-            if v.startswith("["):
-                import json
-                return json.loads(v)
-            return [o.strip() for o in v.split(",") if o.strip()]
         return v
 
 
