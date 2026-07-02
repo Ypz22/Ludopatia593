@@ -48,10 +48,13 @@ async def security_middleware(request: Request, call_next):
         resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return resp
 
+_origins = settings.cors_origins
+_wildcard = "*" in _origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_origin_regex=r"https://.*\.up\.railway\.app" if _wildcard else None,
+    allow_credentials=not _wildcard,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
