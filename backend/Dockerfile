@@ -13,6 +13,9 @@ COPY data ./data
 COPY start.sh ./start.sh
 RUN chmod +x start.sh
 
+# Entrenar modelo en build time para que el arranque sea inmediato
+RUN python -m app.ml.train
+
 # usuario no-root (mínimo privilegio)
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser

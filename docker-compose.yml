@@ -41,11 +41,8 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
-    # entrena modelo, siembra DB y arranca API
-    command: >
-      sh -c "python -m app.ml.train &&
-             python -m app.seed &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # modelo ya entrenado en build; solo siembra DB y arranca API
+    command: sh -c "python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
   frontend:
     build: ./frontend
