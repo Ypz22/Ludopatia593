@@ -20,22 +20,17 @@ from .api import auth, predictions, bets, admin, leaderboard
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     inference.load()  # carga model.json si existe (no falla si no está)
+    print(f"CORS origins: {settings.cors_origins}")
     yield
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,   # restringido, no "*"
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
-)
-
-
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
+    # OPTIONS preflight lo maneja CORSMiddleware, no aplicar rate limit
+    if request.method == "OPTIONS":
+        return await call_next(request)
     # rate limit global por IP (defensa abuso)
     ip = request.client.host if request.client else "unknown"
     if not allow(f"global:{ip}", settings.rate_limit_per_min):
@@ -52,6 +47,14 @@ async def security_middleware(request: Request, call_next):
     if settings.environment != "dev":
         resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return resp
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 
 app.include_router(auth.router)
