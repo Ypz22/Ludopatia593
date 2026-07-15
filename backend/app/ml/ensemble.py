@@ -68,7 +68,7 @@ class EnsembleGBM:
         gbm = self._gbm_probs(eh, ea, 0.5, 0.5, 7, 7, neutral)  # forma neutra sin histórico vivo
         dc = np.array([dc_probs["home"], dc_probs["draw"], dc_probs["away"]])
         blend = self.weight_dc * dc + (1 - self.weight_dc) * gbm
-        blend = blend / blend.sum()
+        blend = blend / np.maximum(blend.sum(), 1e-12)  # evita división por cero
         return {"home": float(blend[0]), "draw": float(blend[1]), "away": float(blend[2])}
 
     def save_meta(self):

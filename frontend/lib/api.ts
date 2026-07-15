@@ -56,4 +56,7 @@ export const api = {
   myBets: () => req("/v1/bets", {}, true),
   performance: () => req("/v1/me/performance", {}, true),
   leaderboard: () => req("/v1/leaderboard"),
+  // Admin: simula el cierre de partidos por jugar y liquida las apuestas pendientes.
+  simulate: (body: { count?: number; stage?: string } = {}) =>
+    req("/v1/admin/simulate", { method: "POST", body: JSON.stringify(body) }, true),
 };

@@ -58,6 +58,19 @@ class Settings(BaseSettings):
             return v.replace("postgresql://", "postgresql+psycopg2://", 1)
         return v
 
+    @field_validator("jwt_secret")
+    @classmethod
+    def reject_weak_secret(cls, v: str, info) -> str:
+        # Fail-fast: fuera de 'dev' el default inseguro o un secreto corto son
+        # inaceptables (permitirían forjar JWT). En prod DEBE venir del entorno.
+        env = info.data.get("environment", "dev")
+        if env != "dev" and (v == "dev-only-insecure-change-me" or len(v) < 32):
+            raise ValueError(
+                "JWT_SECRET inseguro o ausente en entorno no-dev "
+                "(usa 'openssl rand -hex 32')"
+            )
+        return v
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: object) -> list[str]:

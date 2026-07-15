@@ -1,34 +1,77 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
 import { api, clearTokens, getToken } from "@/lib/api";
-import { useRouter } from "next/navigation";
+
+const LINKS = [
+  { href: "/fixtures", label: "Partidos" },
+  { href: "/tournament", label: "Campeón" },
+  { href: "/leaderboard", label: "Ranking" },
+];
 
 export default function Nav() {
   const [points, setPoints] = useState<number | null>(null);
   const [authed, setAuthed] = useState(false);
+  const pathname = usePathname();
   const router = useRouter();
 
-  useEffect(() => {
-    if (!getToken()) return;
-    api.me().then((u) => { setPoints(u.points_balance); setAuthed(true); }).catch(() => {});
+  const refresh = useCallback(() => {
+    if (!getToken()) { setAuthed(false); setPoints(null); return; }
+    api.me().then((u) => { setPoints(u.points_balance); setAuthed(true); }).catch(() => {
+      setAuthed(false); setPoints(null);
+    });
   }, []);
 
+  useEffect(() => {
+    refresh();
+    const h = () => refresh();
+    window.addEventListener("balance:refresh", h);
+    return () => window.removeEventListener("balance:refresh", h);
+  }, [refresh]);
+
+  const isActive = (href: string) => pathname === href || (href !== "/" && pathname?.startsWith(href));
+
   return (
-    <nav>
-      <span className="brand">⚽ Predictor 2026</span>
-      <Link href="/fixtures">Partidos</Link>
-      <Link href="/tournament">Torneo</Link>
-      <Link href="/leaderboard">Ranking</Link>
-      {authed && <Link href="/bets">Mis predicciones</Link>}
-      {authed ? (
-        <>
-          <span className="muted">{points ?? "…"} pts</span>
-          <button className="secondary" onClick={() => { clearTokens(); router.push("/login"); location.reload(); }}>Salir</button>
-        </>
-      ) : (
-        <Link href="/login">Entrar</Link>
-      )}
-    </nav>
+    <header className="topbar">
+      <div className="topbar-inner">
+        <Link href="/" className="brand">
+          <span className="logo">⚽</span>
+          <span>Predictor<span className="accent">26</span></span>
+        </Link>
+
+        <nav className="navlinks">
+          {LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className={`navlink ${isActive(l.href) ? "active" : ""}`}>
+              {l.label}
+            </Link>
+          ))}
+          {authed && (
+            <Link href="/bets" className={`navlink ${isActive("/bets") ? "active" : ""}`}>
+              Mis apuestas
+            </Link>
+          )}
+        </nav>
+
+        <div className="topbar-right">
+          {authed ? (
+            <>
+              <span className="balance-chip">
+                <span className="coin">◈</span>
+                {points ?? "…"}<small>pts</small>
+              </span>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => { clearTokens(); setAuthed(false); router.push("/login"); }}
+              >
+                Salir
+              </button>
+            </>
+          ) : (
+            <Link href="/login" className="btn btn-primary btn-sm">Entrar</Link>
+          )}
+        </div>
+      </div>
+    </header>
   );
 }

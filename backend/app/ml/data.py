@@ -66,6 +66,9 @@ SYNTH_TEAM_STRENGTHS = {
     "Turkey": (0.14, 0.04),
     "Ukraine": (0.10, 0.08),
     "Wales": (0.06, 0.12),
+    "New Zealand": (-0.04, 0.20),
+    "Uzbekistan": (0.02, 0.14),
+    "Jordan": (-0.02, 0.16),
 }
 
 
@@ -75,7 +78,11 @@ def _synthetic(n_matches: int = 4000, seed: int = 42) -> pd.DataFrame:
     strength = {
         team: (
             atk + rng.normal(0.0, 0.05),
-            dfc + rng.normal(0.0, 0.05),
+            # Signo de defensa: el modelo usa lam_visita = exp(atk_a - dfc_local),
+            # por lo que defensa ALTA (positiva) => el rival marca MENOS. En los
+            # priors, los equipos fuertes traen defensa negativa (buena) por
+            # legibilidad, así que la invertimos para que sea consistente.
+            -dfc + rng.normal(0.0, 0.05),
         )
         for team, (atk, dfc) in SYNTH_TEAM_STRENGTHS.items()
     }

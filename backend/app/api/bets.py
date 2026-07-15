@@ -11,6 +11,8 @@ Defensas clave (curso software seguro):
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -67,6 +69,14 @@ def place_prediction(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "fixture no existe")
     if fx.status != FixtureStatus.scheduled:
         raise HTTPException(status.HTTP_409_CONFLICT, "fixture no admite predicciones")
+    # Defensa en profundidad: aunque el status siga 'scheduled', no aceptar
+    # apuestas si el kickoff ya pasó (status desincronizado). Normaliza naive->UTC.
+    ko = fx.kickoff_utc
+    if ko is not None:
+        if ko.tzinfo is None:
+            ko = ko.replace(tzinfo=timezone.utc)
+        if ko <= datetime.now(timezone.utc):
+            raise HTTPException(status.HTTP_409_CONFLICT, "fixture ya inició")
 
     try:
         odds = _server_odds(fx, body.market, body.selection)

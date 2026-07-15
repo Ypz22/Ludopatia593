@@ -5,6 +5,7 @@ cargado al arranque.
 """
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -16,20 +17,35 @@ from .core.ratelimit import allow
 from .ml.inference import inference
 from .api import auth, predictions, bets, admin, leaderboard
 
+logger = logging.getLogger(__name__)
+_is_dev = settings.environment == "dev"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    inference.load()  # carga model.json si existe (no falla si no está)
+    if not inference.load():  # carga model.json si existe (no falla si no está)
+        logger.warning(
+            "model.json no encontrado: endpoints de predicción devolverán 503 "
+            "hasta que se cargue un modelo."
+        )
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+# Fuera de 'dev' se ocultan /docs, /redoc y /openapi.json (menos superficie/recon).
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _is_dev else None,
+    redoc_url="/redoc" if _is_dev else None,
+    openapi_url="/openapi.json" if _is_dev else None,
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,   # restringido, no "*"
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST"],         # la API solo expone GET/POST
     allow_headers=["Authorization", "Content-Type"],
 )
 
