@@ -15,12 +15,10 @@ export default function LoginPage() {
     e.preventDefault();
     setErr(""); setBusy(true);
     try {
-      if (mode === "register") {
-        await api.register(email, password);
-      }
+      if (mode === "register") await api.register(email, password);
       await api.login(email, password);
+      window.dispatchEvent(new Event("balance:refresh"));
       router.push("/fixtures");
-      location.reload();
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -29,21 +27,45 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="card" style={{ maxWidth: 420, margin: "40px auto" }}>
-      <h1>{mode === "login" ? "Entrar" : "Crear cuenta"}</h1>
-      <form onSubmit={submit}>
-        <label>Email</label>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <label>Contraseña {mode === "register" && <span className="muted">(mín. 10 caracteres)</span>}</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={mode === "register" ? 10 : 1} />
-        {err && <p className="err">{err}</p>}
-        <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
-          <button disabled={busy} type="submit">{busy ? "…" : mode === "login" ? "Entrar" : "Registrar"}</button>
-          <button type="button" className="secondary" onClick={() => { setMode(mode === "login" ? "register" : "login"); setErr(""); }}>
-            {mode === "login" ? "Crear cuenta" : "Ya tengo cuenta"}
-          </button>
+    <div className="content-single auth-wrap">
+      <div className="card auth-card">
+        <div className="brand" style={{ justifyContent: "center", margin: "0 0 18px", fontSize: "1.2rem" }}>
+          <span className="logo">⚽</span>
+          <span>Predictor<span className="accent">26</span></span>
         </div>
-      </form>
+
+        <div className="auth-tabs">
+          <button className={`auth-tab ${mode === "login" ? "active" : ""}`}
+            onClick={() => { setMode("login"); setErr(""); }}>Iniciar sesión</button>
+          <button className={`auth-tab ${mode === "register" ? "active" : ""}`}
+            onClick={() => { setMode("register"); setErr(""); }}>Crear cuenta</button>
+        </div>
+
+        <form onSubmit={submit}>
+          <label>Correo electrónico</label>
+          <input type="email" placeholder="tu@correo.com" value={email}
+            onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+
+          <label>Contraseña {mode === "register" && <span className="muted">· mín. 10 caracteres</span>}</label>
+          <input type="password" placeholder="••••••••••" value={password}
+            onChange={(e) => setPassword(e.target.value)} required
+            minLength={mode === "register" ? 10 : 1} autoComplete={mode === "register" ? "new-password" : "current-password"} />
+
+          {err && <p className="err" style={{ marginTop: 12 }}>⚠ {err}</p>}
+
+          <button className="btn btn-primary btn-block" disabled={busy} type="submit" style={{ marginTop: 18 }}>
+            {busy ? <span className="spinner" /> : mode === "login" ? "Entrar" : "Crear cuenta y jugar"}
+          </button>
+        </form>
+
+        <div className="divider" />
+        <div className="auth-perk"><span className="i">◈</span> Recibes <b>&nbsp;1000 puntos&nbsp;</b> virtuales al registrarte.</div>
+        <div className="auth-perk"><span className="i">🔒</span> Contraseñas con Argon2id · sesiones JWT rotatorias.</div>
+        <div className="auth-perk"><span className="i">🎯</span> Cuotas justas sin margen de casa (modelo Dixon-Coles).</div>
+      </div>
+      <p className="muted tiny" style={{ textAlign: "center", marginTop: 14 }}>
+        Puntos virtuales sin valor monetario · proyecto académico de software seguro.
+      </p>
     </div>
   );
 }
