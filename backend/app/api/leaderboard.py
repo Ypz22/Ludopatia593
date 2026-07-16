@@ -12,6 +12,14 @@ from .deps import get_current_user
 router = APIRouter(prefix="/v1", tags=["leaderboard"])
 
 
+def _mask_email(email: str) -> str:
+    """Enmascara el local-part dejando solo la inicial: 'admin@x' -> 'a***@…'."""
+    local = (email or "").split("@")[0]
+    if not local:
+        return "@…"
+    return local[0] + "***@…"
+
+
 @router.get("/leaderboard")
 def leaderboard(db: Session = Depends(get_db)):
     """Top 50 por saldo de puntos."""
@@ -20,7 +28,7 @@ def leaderboard(db: Session = Depends(get_db)):
     ).limit(50).all()
     return [
         {"rank": i + 1, "user_id": r.id,
-         "email": r.email.split("@")[0] + "@…",  # ofusca PII en tablero público
+         "email": _mask_email(r.email),  # ofusca PII en tablero público
          "points": r.points_balance}
         for i, r in enumerate(rows)
     ]

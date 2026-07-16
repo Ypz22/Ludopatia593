@@ -15,7 +15,7 @@ from ..db.models import Fixture
 from ..schemas.schemas import FixtureOut
 from ..ml.inference import inference
 from ..ml.montecarlo import simulate_tournament
-from ..core.ratelimit import _r, _redis_ok
+from ..core.ratelimit import get_redis
 from ..services.api_football import is_real_fixture, normalize_team_name
 
 router = APIRouter(prefix="/v1", tags=["predictions"])
@@ -87,7 +87,8 @@ def tournament_champion(db: Session = Depends(get_db)):
     if not inference.ready:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "modelo no cargado")
 
-    if _redis_ok and _r is not None:
+    _r = get_redis()
+    if _r is not None:
         cached = _r.get(_TOURNEY_CACHE_KEY)
         if cached:
             return json.loads(cached)
@@ -116,6 +117,6 @@ def tournament_champion(db: Session = Depends(get_db)):
     result["source"] = "football-data.org" if real_fixtures else "demo"
     result["group_count"] = len(groups)
 
-    if _redis_ok and _r is not None:
+    if _r is not None:
         _r.setex(_TOURNEY_CACHE_KEY, _TOURNEY_TTL, json.dumps(result))
     return result

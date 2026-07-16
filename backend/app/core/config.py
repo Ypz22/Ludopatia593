@@ -23,9 +23,15 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg2://app:app@localhost:5432/predictor"
     redis_url: str = "redis://localhost:6379/0"
 
-    # Rate limiting (defensa fuerza bruta / abuso API)
+    # Rate limiting (defensa fuerza bruta / abuso API). Además del límite
+    # global, estos endpoints tienen uno propio más estricto porque su abuso
+    # tiene un costo específico (creación masiva de cuentas, farming de
+    # puntos, carga sobre operaciones admin) que el límite global no acota.
     rate_limit_per_min: int = 60
     login_rate_limit_per_min: int = 5
+    register_rate_limit_per_min: int = 8
+    bets_rate_limit_per_min: int = 20
+    admin_rate_limit_per_min: int = 30
 
     # football-data.org. Vacío => ETL usa dataset local.
     football_data_api_key: str = Field(
@@ -68,6 +74,19 @@ class Settings(BaseSettings):
             return v.replace("postgres://", "postgresql+psycopg2://", 1)
         if v.startswith("postgresql://") and "+psycopg2" not in v:
             return v.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return v
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def reject_weak_secret(cls, v: str, info) -> str:
+        # Fail-fast: fuera de 'dev' el default inseguro o un secreto corto son
+        # inaceptables (permitirían forjar JWT). En prod DEBE venir del entorno.
+        env = info.data.get("environment", "dev")
+        if env != "dev" and (v == "dev-only-insecure-change-me" or len(v) < 32):
+            raise ValueError(
+                "JWT_SECRET inseguro o ausente en entorno no-dev "
+                "(usa 'openssl rand -hex 32')"
+            )
         return v
 
 

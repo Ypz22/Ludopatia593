@@ -1,93 +1,217 @@
 "use client";
-import { useEffect, useState } from "react";
-import { api, getToken } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "@/lib/api";
+import { flag, stageLabel } from "@/lib/flags";
+import { useBetSlip } from "@/lib/betslip";
+import BetSlip from "@/components/BetSlip";
 
 type Fixture = {
   id: number; stage: string; home_team: string; away_team: string;
-  kickoff_utc: string; status: string;
+  kickoff_utc: string; status: string; home_score: number | null; away_score: number | null;
 };
+type Odds = { prob: number; fair_odds: number | null };
 
-function Prediction({ fx }: { fx: Fixture }) {
-  const [pred, setPred] = useState<any>(null);
-  const [err, setErr] = useState("");
-  const [stake, setStake] = useState(100);
-  const [sel, setSel] = useState("home");
-  const [msg, setMsg] = useState("");
+function timeLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const t = d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+  return sameDay ? `Hoy ${t}` : d.toLocaleDateString("es", { day: "2-digit", month: "short" }) + ` · ${t}`;
+}
 
-  useEffect(() => {
-    api.prediction(fx.id).then(setPred).catch((e) => setErr(e.message));
-  }, [fx.id]);
+function OddsBtn(props: {
+  fixtureId: number; match: string; marketKey: string; marketLabel: string;
+  sel: string; label: string; selectionLabel: string; odds: number | null;
+}) {
+  const { toggle, isSelected } = useBetSlip();
+  const key = `${props.fixtureId}:${props.marketKey}:${props.sel}`;
+  if (props.odds == null) return (
+    <div className="odds disabled"><span className="lbl">{props.label}</span><span className="val">—</span></div>
+  );
+  return (
+    <button
+      className={`odds ${isSelected(key) ? "selected" : ""}`}
+      onClick={() => toggle({
+        key, fixtureId: props.fixtureId, match: props.match,
+        market: props.marketKey, marketLabel: props.marketLabel,
+        selection: props.sel, selectionLabel: props.selectionLabel, odds: props.odds!,
+      })}
+    >
+      <span className="lbl">{props.label}</span>
+      <span className="val">{props.odds!.toFixed(2)}</span>
+    </button>
+  );
+}
 
-  async function bet() {
-    setMsg("");
-    if (!getToken()) { setMsg("Inicia sesión para predecir."); return; }
-    try {
-      const r = await api.placeBet({
-        fixture_id: fx.id, market: "1x2", selection: sel,
-        stake_points: stake, idempotency_key: crypto.randomUUID(),
-      });
-      setMsg(`✅ Predicción #${r.id} — cuota ${r.odds_taken}, posible retorno ${Math.round(r.stake_points * r.odds_taken)} pts`);
-    } catch (e: any) { setMsg("⚠️ " + e.message); }
-  }
+function MatchCard({ fx, pred }: { fx: Fixture; pred: any }) {
+  const [more, setMore] = useState(false);
+  const finished = fx.status === "finished";
+  const live = fx.status === "live";
+  const match = `${fx.home_team} vs ${fx.away_team}`;
+  const x = pred?.markets?.["1x2"];
+  const ou25 = pred?.markets?.over_under?.["ou_2.5"];
+  const btts = pred?.markets?.btts;
 
-  if (err) return <p className="err">{err}</p>;
-  if (!pred) return <p className="muted">Calculando probabilidades…</p>;
-
-  const x = pred.markets["1x2"];
-  const outcomes: [string, string][] = [["home", fx.home_team], ["draw", "Empate"], ["away", fx.away_team]];
+  const hs = fx.home_score, as = fx.away_score;
+  const homeWon = finished && hs != null && as != null && hs > as;
+  const awayWon = finished && hs != null && as != null && as > hs;
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <div className="grid">
-        {outcomes.map(([k, label]) => (
-          <div className="pill" key={k}>
-            <span className="muted">{label}</span>
-            <b>{(x[k].prob * 100).toFixed(1)}%</b>
-            <span className="muted">cuota {x[k].fair_odds}</span>
-          </div>
-        ))}
+    <div className="match">
+      <div className="match-top">
+        <span className="league">🏆 {stageLabel(fx.stage)}</span>
+        <span className="dot">•</span>
+        <span>{timeLabel(fx.kickoff_utc)}</span>
+        <span style={{ marginLeft: "auto" }}>
+          {live && <span className="badge-live"><span className="pulse" />En vivo</span>}
+          {finished && <span className="badge-final">Final</span>}
+        </span>
       </div>
-      {fx.status === "scheduled" && (
-        <div className="row" style={{ marginTop: 12 }}>
-          <select value={sel} onChange={(e) => setSel(e.target.value)} style={{ maxWidth: 180 }}>
-            {outcomes.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-          </select>
-          <input type="number" min={1} value={stake} onChange={(e) => setStake(+e.target.value)} style={{ maxWidth: 120 }} />
-          <button onClick={bet}>Predecir (pts)</button>
+
+      <div className="match-body">
+        <div className="teams">
+          <div className={`team ${homeWon ? "winner" : ""}`}>
+            <span className="flag">{flag(fx.home_team)}</span>
+            <span className="name">{fx.home_team}</span>
+            {finished && <span className="score">{hs}</span>}
+          </div>
+          <div className={`team ${awayWon ? "winner" : ""}`}>
+            <span className="flag">{flag(fx.away_team)}</span>
+            <span className="name">{fx.away_team}</span>
+            {finished && <span className="score">{as}</span>}
+          </div>
         </div>
+
+        {!finished && (
+          <div className="odds-row">
+            <OddsBtn fixtureId={fx.id} match={match} marketKey="1x2" marketLabel="Ganador del partido (1X2)"
+              sel="home" label="1" selectionLabel={fx.home_team} odds={x?.home?.fair_odds ?? null} />
+            <OddsBtn fixtureId={fx.id} match={match} marketKey="1x2" marketLabel="Ganador del partido (1X2)"
+              sel="draw" label="X" selectionLabel="Empate" odds={x?.draw?.fair_odds ?? null} />
+            <OddsBtn fixtureId={fx.id} match={match} marketKey="1x2" marketLabel="Ganador del partido (1X2)"
+              sel="away" label="2" selectionLabel={fx.away_team} odds={x?.away?.fair_odds ?? null} />
+          </div>
+        )}
+        {finished && <div className="small muted" style={{ textAlign: "right" }}>Partido finalizado</div>}
+      </div>
+
+      {!finished && (ou25 || btts) && (
+        <>
+          {more && (
+            <div className="markets-more">
+              {ou25 && (
+                <div className="market-group">
+                  <div className="mg-title">Total de goles · línea 2.5</div>
+                  <div className="market-line">
+                    <OddsBtn fixtureId={fx.id} match={match} marketKey="ou_2.5" marketLabel="Más/Menos 2.5 goles"
+                      sel="over" label="Más 2.5" selectionLabel="Más de 2.5 goles" odds={ou25.over?.fair_odds ?? null} />
+                    <OddsBtn fixtureId={fx.id} match={match} marketKey="ou_2.5" marketLabel="Más/Menos 2.5 goles"
+                      sel="under" label="Menos 2.5" selectionLabel="Menos de 2.5 goles" odds={ou25.under?.fair_odds ?? null} />
+                  </div>
+                </div>
+              )}
+              {btts && (
+                <div className="market-group">
+                  <div className="mg-title">Ambos equipos marcan</div>
+                  <div className="market-line">
+                    <OddsBtn fixtureId={fx.id} match={match} marketKey="btts" marketLabel="Ambos marcan"
+                      sel="yes" label="Sí" selectionLabel="Ambos marcan: Sí" odds={btts.yes?.fair_odds ?? null} />
+                    <OddsBtn fixtureId={fx.id} match={match} marketKey="btts" marketLabel="Ambos marcan"
+                      sel="no" label="No" selectionLabel="Ambos marcan: No" odds={btts.no?.fair_odds ?? null} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <button className="expander-toggle" onClick={() => setMore(!more)}>
+            {more ? "Menos mercados ▲" : "+ Más mercados (goles, ambos marcan) ▼"}
+          </button>
+        </>
       )}
-      {msg && <p className="muted" style={{ marginTop: 8 }}>{msg}</p>}
-      <p className="muted" style={{ marginTop: 6 }}>modelo {pred.model_version} · Dixon-Coles</p>
+    </div>
+  );
+}
+
+function MatchSkeleton() {
+  return (
+    <div className="match">
+      <div className="match-top"><span className="skeleton" style={{ width: 160, height: 12 }} /></div>
+      <div className="match-body">
+        <div className="teams" style={{ gap: 14 }}>
+          <span className="skeleton" style={{ width: 180, height: 20 }} />
+          <span className="skeleton" style={{ width: 150, height: 20 }} />
+        </div>
+        <div className="odds-row">
+          {[0, 1, 2].map((i) => <span key={i} className="skeleton" style={{ height: 46 }} />)}
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function FixturesPage() {
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
-  const [open, setOpen] = useState<number | null>(null);
+  const [preds, setPreds] = useState<Record<number, any>>({});
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [tab, setTab] = useState<"upcoming" | "results" | "all">("upcoming");
 
   useEffect(() => {
-    api.fixtures().then(setFixtures).catch((e) => setErr(e.message));
+    api.fixtures().then(async (fx: Fixture[]) => {
+      setFixtures(fx);
+      setLoading(false);
+      const active = fx.filter((f) => f.status !== "finished");
+      const entries = await Promise.all(
+        active.map(async (f) => {
+          try { return [f.id, await api.prediction(f.id)] as const; }
+          catch { return [f.id, null] as const; }
+        })
+      );
+      setPreds(Object.fromEntries(entries));
+    }).catch((e) => { setErr(e.message); setLoading(false); });
   }, []);
 
+  const shown = useMemo(() => {
+    if (tab === "upcoming") return fixtures.filter((f) => f.status !== "finished");
+    if (tab === "results") return fixtures.filter((f) => f.status === "finished");
+    return fixtures;
+  }, [fixtures, tab]);
+
+  const upcomingCount = fixtures.filter((f) => f.status !== "finished").length;
+  const resultsCount = fixtures.filter((f) => f.status === "finished").length;
+
   return (
-    <div>
-      <h1>Partidos — Mundial 2026</h1>
-      {err && <p className="err">{err}</p>}
-      {!err && fixtures.length === 0 && <p className="muted">No hay fixtures cargados todavía.</p>}
-      {fixtures.map((fx) => (
-        <div className="card" key={fx.id}>
-          <div className="row" onClick={() => setOpen(open === fx.id ? null : fx.id)} style={{ cursor: "pointer" }}>
-            <div>
-              <b>{fx.home_team}</b> vs <b>{fx.away_team}</b>
-              <div className="muted">{fx.stage} · {new Date(fx.kickoff_utc).toLocaleString("es")}</div>
-            </div>
-            <span className="muted">{open === fx.id ? "▲" : "▼"}</span>
-          </div>
-          {open === fx.id && <Prediction fx={fx} />}
+    <div className="content-wrap">
+      <div className="content-main">
+        <div className="section-head">
+          <h1 style={{ margin: 0 }}>Mundial 2026</h1>
+          <span className="chip">Cuotas justas del modelo</span>
         </div>
-      ))}
+        <p className="muted small" style={{ margin: "-8px 2px 16px" }}>
+          Cuotas <b>sin margen de casa</b> derivadas de un modelo Dixon-Coles calibrado.
+          Toca una cuota para armar tu boleto. Las apuestas <b>se cierran al iniciar el
+          partido</b> (kickoff) y se liquidan automáticamente al conocerse el resultado.
+        </p>
+
+        <div className="auth-tabs" style={{ maxWidth: 380 }}>
+          <button className={`auth-tab ${tab === "upcoming" ? "active" : ""}`} onClick={() => setTab("upcoming")}>
+            Próximos {upcomingCount ? `(${upcomingCount})` : ""}
+          </button>
+          <button className={`auth-tab ${tab === "results" ? "active" : ""}`} onClick={() => setTab("results")}>
+            Resultados {resultsCount ? `(${resultsCount})` : ""}
+          </button>
+          <button className={`auth-tab ${tab === "all" ? "active" : ""}`} onClick={() => setTab("all")}>Todos</button>
+        </div>
+
+        {err && <div className="card"><p className="err">⚠ {err}</p></div>}
+        {loading && <>{[0, 1, 2].map((i) => <MatchSkeleton key={i} />)}</>}
+        {!loading && !err && shown.length === 0 && (
+          <div className="card"><p className="muted">No hay partidos en esta vista todavía.</p></div>
+        )}
+        {shown.map((fx) => <MatchCard key={fx.id} fx={fx} pred={preds[fx.id]} />)}
+      </div>
+
+      <BetSlip />
     </div>
   );
 }

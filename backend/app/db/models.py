@@ -8,7 +8,8 @@ import enum
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    String, Integer, Float, Boolean, DateTime, ForeignKey, Enum, JSON, UniqueConstraint, Index
+    String, Integer, Float, Boolean, DateTime, ForeignKey, Enum, JSON,
+    UniqueConstraint, Index, CheckConstraint
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,12 +40,16 @@ class PredictionStatus(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        # Red de seguridad a nivel DB contra saldos negativos por bugs de liquidación.
+        CheckConstraint("points_balance >= 0", name="ck_users_balance_nonneg"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.user)
-    points_balance: Mapped[int] = mapped_column(Integer, default=1000)  # bankroll virtual inicial
+    points_balance: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)  # bankroll virtual inicial
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
