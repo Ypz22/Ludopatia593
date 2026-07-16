@@ -99,11 +99,18 @@ async def security_middleware(request: Request, call_next):
 
 _origins = settings.cors_origins
 _wildcard = "*" in _origins
+# Nota: NO pasar "*" literal a allow_origins -- Starlette activa un modo
+# "allow all" que ignora allow_origin_regex y siempre responde con el
+# header literal "Access-Control-Allow-Origin: *", lo cual el navegador
+# rechaza cuando la petición usa credentials/cookies (como aquí, para la
+# sesión). En su lugar, si CORS_ORIGINS="*" solo se usa el regex de
+# subdominios de Railway, que sí permite credentials reflejando el origin
+# real de cada request.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
+    allow_origins=[] if _wildcard else _origins,
     allow_origin_regex=r"https://.*\.up\.railway\.app" if _wildcard else None,
-    allow_credentials=not _wildcard,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
 )
