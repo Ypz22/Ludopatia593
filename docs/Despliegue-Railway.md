@@ -9,13 +9,11 @@
 ## 0. Antes de nada: ¿esto tiene CI/CD?
 
 - **CD (entrega continua): sí, parcial.** Railway redepliega automáticamente cada vez que se hace *push* a la rama conectada (usa `backend/railway.toml` y `frontend/railway.toml`, builder = Dockerfile). No hay que desplegar a mano tras el setup inicial.
-- **CI (integración continua): NO existe.** No hay `.github/workflows` ni ningún pipeline que corra tests, lint o escaneo de seguridad **antes** de desplegar. Es decir: un push con el código roto se despliega igual.
-- **Implicación práctica:** hasta que exista CI (ver Apéndice A), la puerta de calidad eres tú. **Antes de cada push a la rama de producción**, corre localmente:
+- **CI (integración continua): sí, implementado** en `.github/workflows/ci.yml`. En cada push/PR corre: (1) **pytest con cobertura** (gate 80%, config en `backend/pytest.ini`), (2) **build** de ambas imágenes Docker, (3) **Trivy** escaneando ambas imágenes (falla ante vulns HIGH/CRITICAL con parche). Los resultados de Trivy suben a la pestaña *Security* del repo.
+- **Implicación práctica:** la CI es la primera puerta de calidad. Aun así, antes de un push conviene correr los tests localmente:
   ```bash
-  # smoke test end-to-end (sin Docker)
-  cd backend && rm -f smoke.db && \
-    DATABASE_URL=sqlite:///./smoke.db JWT_SECRET=test-secret ./.venv/bin/python -m tests.smoke; \
-    rm -f smoke.db
+  # suite completa con cobertura (sin Docker; usa SQLite)
+  cd backend && ./.venv/bin/python -m pytest
   # build de las dos imágenes
   docker compose build
   ```
@@ -180,28 +178,14 @@ Checklist de cierre:
 
 ---
 
-## Apéndice A — CI mínimo recomendado (opcional, aún no existe)
+## Apéndice A — CI (ya implementado)
 
-Hoy no hay CI. Un pipeline mínimo en `.github/workflows/ci.yml` que corra el smoke test y el build antes de permitir el merge cerraría la brecha "push roto se despliega igual":
+El pipeline vive en `.github/workflows/ci.yml` y corre en cada push/PR con tres jobs:
 
-```yaml
-name: CI
-on: { pull_request: {}, push: { branches: [main] } }
-jobs:
-  backend-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install -r backend/requirements.txt
-      - run: cd backend && DATABASE_URL=sqlite:///./smoke.db JWT_SECRET=test-secret python -m tests.smoke
-  docker-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker build -t backend-ci ./backend
-      - run: docker build -t frontend-ci ./frontend --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+1. **`backend-tests`** — `pip install -r backend/requirements-dev.txt` + `pytest` con cobertura (gate 80%, definido en `backend/pytest.ini`).
+2. **`docker-build`** — construye las imágenes backend y frontend y las exporta como artefacto.
+3. **`trivy-scan`** — carga cada imagen y la escanea con Trivy (severidad HIGH/CRITICAL, `ignore-unfixed`); falla el build ante vulns con parche y sube el SARIF a la pestaña *Security*.
+
+Ver el archivo para el detalle; no hace falta reproducirlo aquí.
 
 > Es una **recomendación**, no está implementado. Si se decide adoptarlo, añadir además un job de `trivy image` para cerrar el pendiente de escaneo de vulnerabilidades de la sección 04.

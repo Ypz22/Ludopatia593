@@ -1,6 +1,11 @@
 # Guía de implementación de CI/CD — Ludopatia593
 
-> Documento para **el compañero que implementará el CI/CD**. Estado actual: **no hay CI**; el CD es el auto-deploy de Railway al hacer push. Esta guía te dice exactamente qué crear, con archivos listos para copiar, y cómo conectarlo con Railway para que un push roto **no** llegue a producción.
+> ⚠️ **SUPERSEDED (2026-07-19):** el CI ya está implementado en `.github/workflows/ci.yml`
+> (pytest+cobertura con gate 80%, build de ambas imágenes y escaneo Trivy). La suite pasó
+> de un único `smoke.py` a una suite pytest en `backend/tests/`. Este documento se conserva
+> como registro del plan original; para el estado real ver `Despliegue-Railway.md` §0 + Apéndice A.
+>
+> Documento para **el compañero que implementará el CI/CD**. Estado original: **no había CI**; el CD es el auto-deploy de Railway al hacer push. Esta guía dice qué crear, con archivos listos para copiar, y cómo conectarlo con Railway para que un push roto **no** llegue a producción.
 >
 > _Creado: 2026-07-19._
 
