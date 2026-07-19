@@ -6,10 +6,15 @@ Uso: python -m app.seed
 """
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone, timedelta
 
+from sqlalchemy import inspect, text
+
 from .db.session import Base, engine, SessionLocal
+
+logger = logging.getLogger(__name__)
 from .db.models import (
     User, Team, Fixture, FixtureStatus, Role,
     UserPrediction, PredictionStatus,
@@ -330,8 +335,45 @@ def _build_group_stage(db):
 
 
 
+def _ensure_schema():
+    """Mini-migración idempotente (no hay Alembic activo): agrega la columna
+    'nickname' a bases ya existentes, que create_all no altera.
+
+    Comprueba primero si la columna falta (lectura que cualquier rol puede
+    hacer). Si falta e intenta aplicarla pero NO puede (p.ej. la tabla es de
+    otro dueño y el rol de la app es de mínimo privilegio, sin permiso ALTER),
+    deja un ERROR claro en el log en vez de fallar en silencio y crashear
+    después. En Railway el rol del backend es dueño de la base -> aplica bien.
+    En compose local con app_runtime (no-owner) la columna debe crearla el
+    dueño: recrear el volumen (docker compose down -v) o ejecutar como 'app':
+      ALTER TABLE users ADD COLUMN nickname VARCHAR(30);
+      CREATE UNIQUE INDEX ix_users_nickname ON users (nickname);
+    """
+    cols = {c["name"] for c in inspect(engine).get_columns("users")}
+    if "nickname" in cols:
+        return  # ya migrada (o base fresca creada por create_all)
+
+    stmts = [
+        "ALTER TABLE users ADD COLUMN nickname VARCHAR(30)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_nickname ON users (nickname)",
+    ]
+    for s in stmts:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(s))
+        except Exception as e:
+            logger.error(
+                "No se pudo aplicar la migración de 'nickname' (%s). La columna "
+                "debe crearla el DUEÑO de la tabla (recrea el volumen con "
+                "'docker compose down -v', o ejecútala manualmente como 'app').",
+                e,
+            )
+            return
+
+
 def main():
     Base.metadata.create_all(engine)
+    _ensure_schema()
     db = SessionLocal()
     try:
         # admin (solo si no existe)
@@ -370,7 +412,8 @@ def main():
             for email, balance in DEMO_USERS:
                 if not db.query(User).filter(User.email == email).first():
                     db.add(User(
-                        email=email, password_hash=demo_hash,
+                        email=email, nickname=email.split("@")[0].capitalize(),
+                        password_hash=demo_hash,
                         role=Role.user, points_balance=balance,
                     ))
             db.flush()  # asegura IDs de usuarios antes de crear su historial

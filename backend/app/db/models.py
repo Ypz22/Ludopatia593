@@ -47,6 +47,10 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # Nombre público único que se muestra en el ranking en lugar del correo (PII).
+    # Nullable: las cuentas anteriores a esta columna no lo tienen (se muestra el
+    # correo enmascarado como respaldo). Obligatorio en registros nuevos.
+    nickname: Mapped[str | None] = mapped_column(String(30), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.user)
     points_balance: Mapped[int] = mapped_column(Integer, nullable=False, default=1000)  # bankroll virtual inicial

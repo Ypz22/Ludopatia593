@@ -37,9 +37,9 @@ def test_reset_needs_auth(client):
 def test_reset_clears_bets_and_restores_balance(client, admin_headers):
     # usuario apuesta y gasta puntos
     email = f"r-{uuid.uuid4().hex[:8]}@test.com"
-    client.post("/v1/auth/register", json={"email": email, "password": "supersecret1"})
+    client.post("/v1/auth/register", json={"email": email, "nickname": email.split("@")[0], "password": "supersecret1"})
     tok = client.post("/v1/auth/login",
-                      json={"email": email, "password": "supersecret1"}).json()["access_token"]
+                      json={"email": email, "nickname": email.split("@")[0], "password": "supersecret1"}).json()["access_token"]
     h = {"Authorization": f"Bearer {tok}"}
 
     fid = client.get("/v1/fixtures").json()[0]["id"]
@@ -72,8 +72,8 @@ def test_reset_reopens_fixtures_for_betting(client, admin_headers):
 
     # un usuario nuevo puede apostar tras el reset
     email = f"r2-{uuid.uuid4().hex[:8]}@test.com"
-    client.post("/v1/auth/register", json={"email": email, "password": "supersecret1"})
+    client.post("/v1/auth/register", json={"email": email, "nickname": email.split("@")[0], "password": "supersecret1"})
     tok = client.post("/v1/auth/login",
-                      json={"email": email, "password": "supersecret1"}).json()["access_token"]
+                      json={"email": email, "nickname": email.split("@")[0], "password": "supersecret1"}).json()["access_token"]
     h = {"Authorization": f"Bearer {tok}"}
     assert _bet(client, h, fixtures[0]["id"], "post-reset-bet").status_code == 201

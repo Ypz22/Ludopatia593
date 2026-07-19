@@ -18,6 +18,8 @@ import secrets
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.security import (
@@ -104,9 +106,20 @@ def _issue_tokens(db: Session, user: User, response: Response) -> TokenOut:
 def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status.HTTP_409_CONFLICT, "email ya registrado")
-    user = User(email=body.email, password_hash=hash_password(body.password))
+    if db.query(User).filter(func.lower(User.nickname) == body.nickname.lower()).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, "nickname ya está en uso")
+    user = User(
+        email=body.email, nickname=body.nickname,
+        password_hash=hash_password(body.password),
+    )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Carrera: otro registro tomó el mismo email/nickname entre el chequeo y
+        # el commit -> el unique de la BD es la última línea de defensa.
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "email o nickname ya en uso")
     db.refresh(user)
     db.add(AuditLog(
         actor_id=user.id, action="register", resource=f"user:{user.id}",

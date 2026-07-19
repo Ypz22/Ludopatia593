@@ -17,9 +17,9 @@ def test_settle_requires_auth(client, scheduled_fixture_id):
 def test_admin_settles_and_winning_bet_pays(client, admin_headers):
     # usuario aparte que apuesta local
     client.post("/v1/auth/register",
-                json={"email": "bettor@test.com", "password": "supersecret1"})
+                json={"email": "bettor@test.com", "nickname": "bettoraccount", "password": "supersecret1"})
     tok = client.post("/v1/auth/login",
-                      json={"email": "bettor@test.com", "password": "supersecret1"}
+                      json={"email": "bettor@test.com", "nickname": "bettoraccount", "password": "supersecret1"}
                       ).json()["access_token"]
     h = {"Authorization": f"Bearer {tok}"}
 
