@@ -46,15 +46,22 @@ def run():
     # login mal -> 401
     assert c.post("/v1/auth/login", json={"email": "u1@test.com", "password": "wrong"}).status_code == 401
 
-    # predicción del modelo sobre fixture 1
-    r = c.get("/v1/fixtures/1/prediction")
+    # elige un fixture APOSTABLE (scheduled): la jornada 1 del seed ya está
+    # jugada (finished), así que no se hardcodea id=1.
+    fixtures = c.get("/v1/fixtures").json()
+    scheduled = [f for f in fixtures if f["status"] == "scheduled"]
+    assert scheduled, "el seed no dejó fixtures 'scheduled' para apostar"
+    fid = scheduled[0]["id"]
+
+    # predicción del modelo sobre el fixture elegido
+    r = c.get(f"/v1/fixtures/{fid}/prediction")
     assert r.status_code == 200, r.text
     p = r.json()["markets"]["1x2"]
     assert abs(p["home"]["prob"] + p["draw"]["prob"] + p["away"]["prob"] - 1.0) < 1e-3
-    print("1x2 fixture1:", {k: p[k]["prob"] for k in ("home", "draw", "away")})
+    print(f"1x2 fixture{fid}:", {k: p[k]["prob"] for k in ("home", "draw", "away")})
 
     # apuesta con puntos
-    bet = {"fixture_id": 1, "market": "1x2", "selection": "home",
+    bet = {"fixture_id": fid, "market": "1x2", "selection": "home",
            "stake_points": 100, "idempotency_key": "idem-key-0001"}
     r = c.post("/v1/bets", json=bet, headers=h)
     assert r.status_code == 201, r.text
@@ -78,10 +85,10 @@ def run():
     assert c.get(f"/v1/bets/{bet_id}", headers=h2).status_code == 404, "IDOR no bloqueado!"
     print("IDOR bloqueado OK")
 
-    # admin liquida fixture 1 con victoria local -> gana
+    # admin liquida el fixture apostado con victoria local -> la apuesta gana
     atok = c.post("/v1/auth/login", json={"email": "admin@example.com", "password": "admin-pass-123"}).json()["access_token"]
     ah = {"Authorization": f"Bearer {atok}"}
-    r = c.post("/v1/admin/fixtures/1/result", json={"home_score": 2, "away_score": 0}, headers=ah)
+    r = c.post(f"/v1/admin/fixtures/{fid}/result", json={"home_score": 2, "away_score": 0}, headers=ah)
     assert r.status_code == 200, r.text
     print("liquidación:", r.json())
 
@@ -90,7 +97,7 @@ def run():
     assert perf["won"] == 1
 
     # usuario normal NO puede liquidar (RBAC)
-    assert c.post("/v1/admin/fixtures/1/result", json={"home_score": 1, "away_score": 1}, headers=h).status_code == 403
+    assert c.post(f"/v1/admin/fixtures/{fid}/result", json={"home_score": 1, "away_score": 1}, headers=h).status_code == 403
     print("RBAC admin OK")
 
     lb = c.get("/v1/leaderboard").json()
