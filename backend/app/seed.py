@@ -376,13 +376,18 @@ def main():
     _ensure_schema()
     db = SessionLocal()
     try:
-        # admin (solo si no existe)
+        # admin (solo si no existe). Nickname fijo "Admin" para el ranking.
         admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-        if not db.query(User).filter(User.email == admin_email).first():
+        admin_user = db.query(User).filter(User.email == admin_email).first()
+        if not admin_user:
             pw = os.getenv("ADMIN_PASSWORD")
             if not pw:
                 raise SystemExit("define ADMIN_PASSWORD en el entorno para crear el admin")
-            db.add(User(email=admin_email, password_hash=hash_password(pw), role=Role.admin))
+            db.add(User(email=admin_email, nickname="Admin",
+                        password_hash=hash_password(pw), role=Role.admin))
+        elif not admin_user.nickname:
+            # Backfill: admin creado antes de existir los nicknames.
+            admin_user.nickname = "Admin"
 
         # equipos desde el modelo (si está cargado)
         inference.load()

@@ -57,9 +57,9 @@ def test_idor_other_user_cannot_read_bet(client, user_headers, scheduled_fixture
     bet_id = _place_bet(client, user_headers, scheduled_fixture_id, key="idem-idor").json()["id"]
     # segundo usuario
     client.post("/v1/auth/register",
-                json={"email": "intruder@test.com", "nickname": "intruderx", "password": "supersecret2"})
+                json={"email": "intruder@test.com", "nickname": "intruderx", "password": "Supersecret2!"})
     tok = client.post("/v1/auth/login",
-                      json={"email": "intruder@test.com", "nickname": "intruderx", "password": "supersecret2"}
+                      json={"email": "intruder@test.com", "nickname": "intruderx", "password": "Supersecret2!"}
                       ).json()["access_token"]
     h2 = {"Authorization": f"Bearer {tok}"}
     assert client.get(f"/v1/bets/{bet_id}", headers=h2).status_code == 404

@@ -23,6 +23,20 @@ class RegisterIn(BaseModel):
             raise ValueError("nickname: 3-30 caracteres, solo letras, números, espacios y . - _")
         return v
 
+    @field_validator("password")
+    @classmethod
+    def strong_password(cls, v: str) -> str:
+        # Complejidad mínima: >=10 chars, 1 mayúscula, 1 número y 1 especial.
+        if (len(v) < 10
+                or not re.search(r"[A-Z]", v)
+                or not re.search(r"\d", v)
+                or not re.search(r"[^A-Za-z0-9]", v)):
+            raise ValueError(
+                "contraseña: mínimo 10 caracteres, con al menos una mayúscula, "
+                "un número y un caracter especial"
+            )
+        return v
+
 
 class LoginIn(BaseModel):
     email: EmailStr

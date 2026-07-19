@@ -133,7 +133,12 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
 def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
     ip = request.client.host if request.client else "unknown"
     if not allow(f"login:{ip}", settings.login_rate_limit_per_min):
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "demasiados intentos")
+        # Retry-After: la ventana del rate limit es de 60s -> el frontend usa
+        # este valor para bloquear el botón "Entrar" durante ese tiempo.
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, "demasiados intentos",
+            headers={"Retry-After": "60"},
+        )
 
     user = db.query(User).filter(User.email == body.email).first()
     # verificación constante: siempre comparamos para no filtrar existencia por timing

@@ -6,8 +6,8 @@ import uuid
 
 def _fresh_login(client):
     email = f"s-{uuid.uuid4().hex[:8]}@test.com"
-    client.post("/v1/auth/register", json={"email": email, "nickname": email.split("@")[0], "password": "supersecret1"})
-    r = client.post("/v1/auth/login", json={"email": email, "nickname": email.split("@")[0], "password": "supersecret1"})
+    client.post("/v1/auth/register", json={"email": email, "nickname": email.split("@")[0], "password": "Supersecret1!"})
+    r = client.post("/v1/auth/login", json={"email": email, "nickname": email.split("@")[0], "password": "Supersecret1!"})
     assert r.status_code == 200, r.text
     headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
     return email, headers
@@ -16,9 +16,9 @@ def _fresh_login(client):
 def test_register_duplicate_email_409(client):
     email = f"dup-{uuid.uuid4().hex[:8]}@test.com"
     assert client.post("/v1/auth/register",
-                       json={"email": email, "nickname": email.split("@")[0], "password": "supersecret1"}).status_code == 201
+                       json={"email": email, "nickname": email.split("@")[0], "password": "Supersecret1!"}).status_code == 201
     assert client.post("/v1/auth/register",
-                       json={"email": email, "nickname": email.split("@")[0], "password": "supersecret1"}).status_code == 409
+                       json={"email": email, "nickname": email.split("@")[0], "password": "Supersecret1!"}).status_code == 409
 
 
 def test_refresh_rotates_with_valid_csrf(client):

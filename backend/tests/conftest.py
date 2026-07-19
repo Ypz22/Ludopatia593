@@ -73,7 +73,7 @@ def _register_and_login(client, email: str, password: str) -> dict:
 def user_headers(client):
     # Email único por test: la BD se siembra una vez por sesión, así que un
     # email fijo se compartiría entre tests y arrastraría saldo/apuestas.
-    return _register_and_login(client, f"u-{uuid.uuid4().hex[:8]}@test.com", "supersecret1")
+    return _register_and_login(client, f"u-{uuid.uuid4().hex[:8]}@test.com", "Supersecret1!")
 
 
 @pytest.fixture()
