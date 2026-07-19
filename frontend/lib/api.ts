@@ -43,8 +43,8 @@ function csrfHeaders(): Record<string, string> {
 }
 
 export const api = {
-  register: (email: string, password: string) =>
-    req("/v1/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
+  register: (email: string, password: string, nickname: string) =>
+    req("/v1/auth/register", { method: "POST", body: JSON.stringify({ email, nickname, password }) }),
   login: async (email: string, password: string) => {
     const t = await req("/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
     setAccessToken(t.access_token);

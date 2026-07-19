@@ -34,9 +34,9 @@ export default function LeaderboardPage() {
                   <td>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 9 }}>
                       <span style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--elev)", display: "grid", placeItems: "center", fontSize: "0.8rem" }}>
-                        {r.email?.[0]?.toUpperCase() ?? "?"}
+                        {r.name?.[0]?.toUpperCase() ?? "?"}
                       </span>
-                      <b>{r.email}</b>
+                      <b>{r.name}</b>
                     </span>
                   </td>
                   <td style={{ textAlign: "right", fontWeight: 800, color: "var(--gold)" }}>◈ {r.points}</td>

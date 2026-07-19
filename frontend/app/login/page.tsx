@@ -26,6 +26,7 @@ const DEMO_ACCOUNTS = [
 export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
+  const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [capsOn, setCapsOn] = useState(false);
@@ -39,7 +40,7 @@ export default function LoginPage() {
     e.preventDefault();
     setErr(""); setBusy(true);
     try {
-      if (mode === "register") await api.register(email, password);
+      if (mode === "register") await api.register(email, password, nickname.trim());
       await api.login(email, password);
       window.dispatchEvent(new Event("balance:refresh"));
       router.push("/fixtures");
@@ -87,6 +88,15 @@ export default function LoginPage() {
           <label>Correo electrónico</label>
           <input type="email" placeholder="tu@correo.com" value={email}
             onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+
+          {mode === "register" && (
+            <>
+              <label>Nickname <span className="muted">· nombre público en el ranking</span></label>
+              <input type="text" placeholder="tu apodo" value={nickname}
+                onChange={(e) => setNickname(e.target.value)} required
+                minLength={3} maxLength={30} autoComplete="off" />
+            </>
+          )}
 
           <label>Contraseña {mode === "register" && <span className="muted">· mín. 10 caracteres</span>}</label>
           <div className="pw-field">

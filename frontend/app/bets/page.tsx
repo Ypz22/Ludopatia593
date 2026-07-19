@@ -28,6 +28,7 @@ export default function BetsPage() {
   const [simulating, setSimulating] = useState(false);
   const [simMsg, setSimMsg] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [confirm, setConfirm] = useState<{ title: string; body: string; run: () => Promise<void> } | null>(null);
   const router = useRouter();
   const { authed, initializing } = useSession();
 
@@ -67,13 +68,26 @@ export default function BetsPage() {
     }
   }
 
+  function askSimulate() {
+    setConfirm({
+      title: "Jugar siguiente jornada",
+      body: "Se jugará la próxima ronda con los resultados reales y se liquidarán " +
+        "las apuestas pendientes (se acreditan los pagos). ¿Continuar?",
+      run: runSimulate,
+    });
+  }
+
+  function askReset() {
+    setConfirm({
+      title: "Reiniciar torneo",
+      body: "Se borran TODAS las apuestas, se restablece el saldo de todos los " +
+        "usuarios a 1000 y el torneo vuelve al primer partido. Esta acción no se " +
+        "puede deshacer.",
+      run: runReset,
+    });
+  }
+
   async function runReset() {
-    // Acción destructiva: borra apuestas y reinicia saldos. Confirmar antes.
-    if (!window.confirm(
-      "¿Reiniciar el torneo desde cero? Se borran TODAS las apuestas, se " +
-      "restablece el saldo de todos los usuarios y el torneo vuelve al primer " +
-      "partido. Esta acción no se puede deshacer."
-    )) return;
     setResetting(true);
     setSimMsg("");
     try {
@@ -111,10 +125,10 @@ export default function BetsPage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn" onClick={runSimulate} disabled={simulating || resetting}>
+              <button className="btn" onClick={askSimulate} disabled={simulating || resetting}>
                 {simulating ? <><span className="spinner" /> Jugando…</> : "Jugar siguiente jornada"}
               </button>
-              <button className="btn" onClick={runReset} disabled={simulating || resetting}
+              <button className="btn" onClick={askReset} disabled={simulating || resetting}
                 style={{ background: "transparent", borderColor: "var(--gold)" }}>
                 {resetting ? <><span className="spinner" /> Reiniciando…</> : "Reiniciar torneo"}
               </button>
@@ -160,7 +174,7 @@ export default function BetsPage() {
           <table>
             <thead>
               <tr>
-                <th>#</th><th>Mercado</th><th>Selección</th><th style={{ textAlign: "right" }}>Stake</th>
+                <th>#</th><th>Partido</th><th>Mercado</th><th>Selección</th><th style={{ textAlign: "right" }}>Stake</th>
                 <th style={{ textAlign: "right" }}>Cuota</th><th>Estado</th><th style={{ textAlign: "right" }}>Pago</th>
               </tr>
             </thead>
@@ -168,6 +182,7 @@ export default function BetsPage() {
               {bets.map((b) => (
                 <tr key={b.id}>
                   <td className="muted">{b.id}</td>
+                  <td>{b.home_team && b.away_team ? `${b.home_team} vs ${b.away_team}` : "—"}</td>
                   <td>{marketName(b.market)}</td>
                   <td>{SEL_LABEL[b.selection] ?? b.selection}</td>
                   <td style={{ textAlign: "right" }}>{b.stake_points}</td>
@@ -182,6 +197,27 @@ export default function BetsPage() {
           </table>
         )}
       </div>
+
+      {confirm && (
+        <div role="dialog" aria-modal="true"
+          onClick={() => setConfirm(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)",
+            display: "grid", placeItems: "center", zIndex: 100, padding: 16 }}>
+          <div className="card" onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 440, width: "100%", borderColor: "var(--gold)" }}>
+            <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 8 }}>{confirm.title}</div>
+            <p className="muted small" style={{ marginTop: 0 }}>{confirm.body}</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+              <button className="btn" onClick={() => setConfirm(null)}
+                style={{ background: "transparent" }}>Cancelar</button>
+              <button className="btn btn-primary"
+                onClick={async () => { const c = confirm; setConfirm(null); await c.run(); }}>
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
