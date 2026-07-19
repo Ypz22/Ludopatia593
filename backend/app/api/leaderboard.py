@@ -22,13 +22,14 @@ def _mask_email(email: str) -> str:
 
 @router.get("/leaderboard")
 def leaderboard(db: Session = Depends(get_db)):
-    """Top 50 por saldo de puntos."""
-    rows = db.query(User.id, User.email, User.points_balance).order_by(
+    """Top 50 por saldo de puntos. Muestra el nickname público; si la cuenta es
+    anterior a los nicknames, cae al correo enmascarado (no expone PII)."""
+    rows = db.query(User.id, User.nickname, User.email, User.points_balance).order_by(
         User.points_balance.desc()
     ).limit(50).all()
     return [
         {"rank": i + 1, "user_id": r.id,
-         "email": _mask_email(r.email),  # ofusca PII en tablero público
+         "name": r.nickname or _mask_email(r.email),
          "points": r.points_balance}
         for i, r in enumerate(rows)
     ]

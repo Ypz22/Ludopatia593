@@ -10,17 +10,17 @@ def test_health_reports_model_loaded(client):
 
 def test_register_then_login_ok(client):
     r = client.post("/v1/auth/register",
-                    json={"email": "new@test.com", "password": "supersecret1"})
+                    json={"email": "new@test.com", "nickname": "newacct", "password": "Supersecret1!"})
     assert r.status_code == 201, r.text
     r = client.post("/v1/auth/login",
-                    json={"email": "new@test.com", "password": "supersecret1"})
+                    json={"email": "new@test.com", "nickname": "newacct", "password": "Supersecret1!"})
     assert r.status_code == 200, r.text
     assert "access_token" in r.json()
 
 
 def test_login_wrong_password_401(client):
     client.post("/v1/auth/register",
-                json={"email": "wp@test.com", "password": "supersecret1"})
+                json={"email": "wp@test.com", "nickname": "wppass", "password": "Supersecret1!"})
     r = client.post("/v1/auth/login",
                     json={"email": "wp@test.com", "password": "wrong-one"})
     assert r.status_code == 401

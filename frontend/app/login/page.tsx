@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
 
@@ -26,25 +26,45 @@ const DEMO_ACCOUNTS = [
 export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
+  const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [capsOn, setCapsOn] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lockSeconds, setLockSeconds] = useState(0);
   const router = useRouter();
 
   const pwTooShort = mode === "register" && password.length > 0 && password.length < 10;
+  // Reglas de contraseña (registro): mayúscula, número y caracter especial.
+  const pwWeak = mode === "register" && password.length >= 10 &&
+    !(/[A-Z]/.test(password) && /\d/.test(password) && /[^A-Za-z0-9]/.test(password));
+  const locked = lockSeconds > 0;
+  const mmss = `${Math.floor(lockSeconds / 60)}:${String(lockSeconds % 60).padStart(2, "0")}`;
+
+  // Cuenta atrás del bloqueo tras un 429 (demasiados intentos).
+  useEffect(() => {
+    if (lockSeconds <= 0) return;
+    const t = setInterval(() => setLockSeconds((s) => (s <= 1 ? 0 : s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [lockSeconds]);
+
+  function handleAuthError(e: any) {
+    setErr(e.message);
+    if (e?.status === 429) setLockSeconds(e.retryAfter && e.retryAfter > 0 ? e.retryAfter : 60);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (locked) return;
     setErr(""); setBusy(true);
     try {
-      if (mode === "register") await api.register(email, password);
+      if (mode === "register") await api.register(email, password, nickname.trim());
       await api.login(email, password);
       window.dispatchEvent(new Event("balance:refresh"));
       router.push("/fixtures");
     } catch (e: any) {
-      setErr(e.message);
+      handleAuthError(e);
     } finally {
       setBusy(false);
     }
@@ -62,7 +82,7 @@ export default function LoginPage() {
       window.dispatchEvent(new Event("balance:refresh"));
       router.push("/fixtures");
     } catch (e: any) {
-      setErr(e.message);
+      handleAuthError(e);
     } finally {
       setBusy(false);
     }
@@ -73,7 +93,7 @@ export default function LoginPage() {
       <div className="card auth-card">
         <div className="brand" style={{ justifyContent: "center", margin: "0 0 18px", fontSize: "1.2rem" }}>
           <span className="logo">⚽</span>
-          <span>Predictor<span className="accent">26</span></span>
+          <span>Ludopatia <span className="accent">593</span></span>
         </div>
 
         <div className="auth-tabs">
@@ -88,7 +108,16 @@ export default function LoginPage() {
           <input type="email" placeholder="tu@correo.com" value={email}
             onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
 
-          <label>Contraseña {mode === "register" && <span className="muted">· mín. 10 caracteres</span>}</label>
+          {mode === "register" && (
+            <>
+              <label>Nickname <span className="muted">· nombre público en el ranking</span></label>
+              <input type="text" placeholder="tu apodo" value={nickname}
+                onChange={(e) => setNickname(e.target.value)} required
+                minLength={3} maxLength={30} autoComplete="off" />
+            </>
+          )}
+
+          <label>Contraseña {mode === "register" && <span className="muted">· mín. 10, 1 mayúscula, 1 número, 1 especial</span>}</label>
           <div className="pw-field">
             <input type={showPw ? "text" : "password"} placeholder="••••••••••" value={password}
               onChange={(e) => setPassword(e.target.value)} required
@@ -103,11 +132,15 @@ export default function LoginPage() {
           </div>
           {capsOn && <p className="hint warn">⇪ Bloq Mayús activado</p>}
           {pwTooShort && <p className="hint">Te faltan {10 - password.length} caracteres.</p>}
+          {pwWeak && <p className="hint warn">Falta una mayúscula, un número o un caracter especial.</p>}
 
           {err && <p className="err" style={{ marginTop: 12 }}>⚠ {err}</p>}
+          {locked && <p className="hint warn">Demasiados intentos. Espera {mmss} para reintentar.</p>}
 
-          <button className="btn btn-primary btn-block" disabled={busy} type="submit" style={{ marginTop: 18 }}>
-            {busy ? <span className="spinner" /> : mode === "login" ? "Entrar" : "Crear cuenta y jugar"}
+          <button className="btn btn-primary btn-block" disabled={busy || locked} type="submit" style={{ marginTop: 18 }}>
+            {busy ? <span className="spinner" />
+              : locked ? `Espera ${mmss}`
+              : mode === "login" ? "Entrar" : "Crear cuenta y jugar"}
           </button>
         </form>
 
@@ -119,7 +152,7 @@ export default function LoginPage() {
                 Cuentas de demostración
               </p>
               {DEMO_ACCOUNTS.map((acc) => (
-                <button key={acc.email} type="button" className="demo-acc" disabled={busy}
+                <button key={acc.email} type="button" className="demo-acc" disabled={busy || locked}
                   onClick={() => useDemo(acc)} title={`Entrar como ${acc.role}`}>
                   <span className="demo-acc-role">{acc.role}</span>
                   <span className="demo-acc-mail">{acc.email}</span>

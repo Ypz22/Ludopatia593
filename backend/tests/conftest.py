@@ -63,8 +63,8 @@ def _reset_ratelimit():
 # ---- helpers de autenticación reutilizables ----
 
 def _register_and_login(client, email: str, password: str) -> dict:
-    client.post("/v1/auth/register", json={"email": email, "password": password})
-    r = client.post("/v1/auth/login", json={"email": email, "password": password})
+    client.post("/v1/auth/register", json={"email": email, "nickname": email.split("@")[0], "password": password})
+    r = client.post("/v1/auth/login", json={"email": email, "nickname": email.split("@")[0], "password": password})
     assert r.status_code == 200, r.text
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
@@ -73,7 +73,7 @@ def _register_and_login(client, email: str, password: str) -> dict:
 def user_headers(client):
     # Email único por test: la BD se siembra una vez por sesión, así que un
     # email fijo se compartiría entre tests y arrastraría saldo/apuestas.
-    return _register_and_login(client, f"u-{uuid.uuid4().hex[:8]}@test.com", "supersecret1")
+    return _register_and_login(client, f"u-{uuid.uuid4().hex[:8]}@test.com", "Supersecret1!")
 
 
 @pytest.fixture()

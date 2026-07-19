@@ -31,7 +31,13 @@ async function req(path: string, opts: RequestInit = {}, auth = false, _retried 
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail; } catch {}
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    const err: any = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    err.status = res.status;
+    // Retry-After (segundos) en respuestas 429 -> el llamador puede bloquear el
+    // botón durante ese tiempo.
+    const ra = res.headers.get("Retry-After");
+    if (ra) err.retryAfter = parseInt(ra, 10);
+    throw err;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -43,8 +49,8 @@ function csrfHeaders(): Record<string, string> {
 }
 
 export const api = {
-  register: (email: string, password: string) =>
-    req("/v1/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
+  register: (email: string, password: string, nickname: string) =>
+    req("/v1/auth/register", { method: "POST", body: JSON.stringify({ email, nickname, password }) }),
   login: async (email: string, password: string) => {
     const t = await req("/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
     setAccessToken(t.access_token);
@@ -72,4 +78,7 @@ export const api = {
   // Admin: simula el cierre de partidos por jugar y liquida las apuestas pendientes.
   simulate: (body: { count?: number; stage?: string } = {}) =>
     req("/v1/admin/simulate", { method: "POST", body: JSON.stringify(body) }, true),
+  // Admin: reinicia el torneo desde cero (todos apuestan desde el primer partido).
+  resetTournament: () =>
+    req("/v1/admin/reset-tournament", { method: "POST" }, true),
 };

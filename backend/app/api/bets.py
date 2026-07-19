@@ -99,11 +99,21 @@ def place_prediction(
     except KeyError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"equipo sin datos: {e}")
 
-    # bloqueo de fila del usuario para descuento atómico de puntos (anti race)
-    locked = db.query(User).filter(User.id == user.id).with_for_update().one()
-    if locked.points_balance < body.stake_points:
+    # Descuento ATÓMICO de puntos con guardia en el propio UPDATE: una sola
+    # sentencia SQL resta el stake solo si hay saldo suficiente. Al no haber
+    # hueco leer-luego-escribir, no hay lost update aunque el boleto envíe varias
+    # apuestas en paralelo (el frontend hace Promise.all). Funciona igual en
+    # SQLite (que ignora SELECT ... FOR UPDATE) y en Postgres. rowcount 0 => no
+    # alcanzó el saldo.
+    debited = db.query(User).filter(
+        User.id == user.id,
+        User.points_balance >= body.stake_points,
+    ).update(
+        {User.points_balance: User.points_balance - body.stake_points},
+        synchronize_session=False,
+    )
+    if not debited:
         raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "puntos insuficientes")
-    locked.points_balance -= body.stake_points
 
     pred = UserPrediction(
         user_id=user.id,
@@ -139,14 +149,27 @@ def place_prediction(
     return pred
 
 
+def _with_match(db: Session, preds: list[UserPrediction]) -> list[UserPrediction]:
+    """Adjunta home_team/away_team a cada predicción (para mostrar el partido en
+    la tabla). Un solo query por lote -- sin N+1."""
+    ids = {p.fixture_id for p in preds}
+    fx_map = {f.id: f for f in db.query(Fixture).filter(Fixture.id.in_(ids)).all()} if ids else {}
+    for p in preds:
+        fx = fx_map.get(p.fixture_id)
+        p.home_team = fx.home_team if fx else None
+        p.away_team = fx.away_team if fx else None
+    return preds
+
+
 @router.get("", response_model=list[PredictionOut])
 def my_predictions(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return db.query(UserPrediction).filter(
+    preds = db.query(UserPrediction).filter(
         UserPrediction.user_id == user.id
     ).order_by(UserPrediction.created_at.desc()).limit(200).all()
+    return _with_match(db, preds)
 
 
 @router.get("/{pred_id}", response_model=PredictionOut)
@@ -159,4 +182,4 @@ def get_prediction(
     # control IDOR: el recurso debe pertenecer al usuario del token
     if not pred or pred.user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no encontrado")
-    return pred
+    return _with_match(db, [pred])[0]

@@ -17,14 +17,14 @@ from app.core.security import (
 
 
 def test_hash_is_argon2id_and_not_plaintext():
-    h = hash_password("supersecret1")
-    assert h != "supersecret1"
+    h = hash_password("Supersecret1!")
+    assert h != "Supersecret1!"
     assert h.startswith("$argon2id$")
 
 
 def test_verify_password_correct_and_wrong():
-    h = hash_password("supersecret1")
-    assert verify_password("supersecret1", h) is True
+    h = hash_password("Supersecret1!")
+    assert verify_password("Supersecret1!", h) is True
     assert verify_password("wrong-password", h) is False
 
 
@@ -34,7 +34,7 @@ def test_verify_password_rejects_garbage_hash():
 
 
 def test_needs_rehash_false_for_current_params():
-    assert needs_rehash(hash_password("supersecret1")) is False
+    assert needs_rehash(hash_password("Supersecret1!")) is False
 
 
 def test_needs_rehash_true_for_invalid_hash():

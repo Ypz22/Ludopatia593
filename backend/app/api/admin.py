@@ -22,8 +22,13 @@ from ..ml.markets import market_1x2, market_over_under, market_btts
 from .predictions import invalidate_prediction_cache
 from .deps import require_admin
 from ..services.api_football import sync_world_cup_fixtures
+from ..seed import _build_group_stage
 
 logger = logging.getLogger(__name__)
+
+# Bankroll virtual inicial (coincide con el default de User.points_balance). Al
+# reiniciar el torneo cada usuario vuelve a este saldo.
+STARTING_BALANCE = 1000
 
 # Límite a nivel de router: cubre TODAS las rutas admin (actuales y futuras)
 # con una sola línea -- defensa en profundidad, RBAC ya es el control primario.
@@ -158,6 +163,58 @@ def settle_fixture(
     db.commit()
     invalidate_prediction_cache()
     return {"fixture_id": fixture_id, "settled": settled}
+
+
+@router.post("/reset-tournament")
+def reset_tournament(
+    request: Request,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Reinicia el torneo DESDE CERO (primer partido).
+
+    - Borra todas las apuestas/predicciones de todos los usuarios.
+    - Devuelve a cada usuario NO admin el bankroll inicial.
+    - Rehace todos los fixtures desde el seed (todos 'scheduled', kickoff a
+      futuro, con su round_order correcto para el desbloqueo progresivo y su
+      resultado real guardado oculto). Rehacerlos —en vez de solo tocarlos—
+      sana bases con datos viejos (p.ej. round_order=0 de un esquema anterior,
+      que mostraba TODAS las rondas de golpe en vez de una a la vez).
+
+    Operación destructiva pero acotada al estado del juego: NO borra cuentas ni
+    la bitácora de auditoría. Protegida por RBAC admin + rate limit del router.
+    """
+    deleted_preds = db.query(UserPrediction).delete(synchronize_session=False)
+    # Todos los usuarios (incluido el admin) vuelven al bankroll inicial.
+    users_reset = db.query(User).update(
+        {User.points_balance: STARTING_BALANCE}, synchronize_session=False
+    )
+
+    # Borrar y reconstruir los fixtures garantiza el estado inicial correcto
+    # (round_order incluido) sin depender de lo que hubiera en la base.
+    db.query(Fixture).delete(synchronize_session=False)
+    db.flush()
+    _build_group_stage(db)
+    db.flush()
+    fixtures_reset = db.query(Fixture).count()
+
+    db.add(AuditLog(
+        actor_id=admin.id, action="reset_tournament", resource="tournament",
+        detail={
+            "predictions_deleted": deleted_preds,
+            "users_reset": users_reset,
+            "fixtures_reset": fixtures_reset,
+            "request_id": request.state.request_id,
+        },
+    ))
+    db.commit()
+    invalidate_prediction_cache()
+    return {
+        "ok": True,
+        "predictions_deleted": deleted_preds,
+        "users_reset": users_reset,
+        "fixtures_reset": fixtures_reset,
+    }
 
 
 @router.post("/simulate")
