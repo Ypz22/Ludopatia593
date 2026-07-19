@@ -22,13 +22,14 @@ def _mask_email(email: str) -> str:
 
 @router.get("/leaderboard")
 def leaderboard(db: Session = Depends(get_db)):
-    """Top 50 por saldo de puntos."""
-    rows = db.query(User.id, User.email, User.points_balance).order_by(
+    """Top 50 por saldo de puntos. Muestra el nickname público; si la cuenta es
+    anterior a los nicknames, cae al correo enmascarado (no expone PII)."""
+    rows = db.query(User.id, User.nickname, User.email, User.points_balance).order_by(
         User.points_balance.desc()
     ).limit(50).all()
     return [
         {"rank": i + 1, "user_id": r.id,
-         "email": _mask_email(r.email),  # ofusca PII en tablero público
+         "name": r.nickname or _mask_email(r.email),
          "points": r.points_balance}
         for i, r in enumerate(rows)
     ]
@@ -36,12 +37,17 @@ def leaderboard(db: Session = Depends(get_db)):
 
 @router.get("/me/performance")
 def my_performance(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # ROI y hit-rate se calculan SOLO sobre apuestas ya liquidadas (settled):
+    # incluir el stake de apuestas pendientes en el denominador distorsionaría
+    # el ROI (dinero aún en juego, sin retorno todavía). Ambas métricas usan la
+    # misma población para ser coherentes.
+    settled_pred = UserPrediction.status != PredictionStatus.pending
     q = db.query(
         func.count(UserPrediction.id),
-        func.coalesce(func.sum(UserPrediction.stake_points), 0),
+        func.coalesce(func.sum(case((settled_pred, UserPrediction.stake_points), else_=0)), 0),
         func.coalesce(func.sum(UserPrediction.payout_points), 0),
         func.coalesce(func.sum(case((UserPrediction.status == PredictionStatus.won, 1), else_=0)), 0),
-        func.coalesce(func.sum(case((UserPrediction.status != PredictionStatus.pending, 1), else_=0)), 0),
+        func.coalesce(func.sum(case((settled_pred, 1), else_=0)), 0),
     ).filter(UserPrediction.user_id == user.id).one()
 
     total, staked, returned, won, settled = q

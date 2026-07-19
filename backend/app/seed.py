@@ -6,10 +6,15 @@ Uso: python -m app.seed
 """
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone, timedelta
 
+from sqlalchemy import inspect, text
+
 from .db.session import Base, engine, SessionLocal
+
+logger = logging.getLogger(__name__)
 from .db.models import (
     User, Team, Fixture, FixtureStatus, Role,
     UserPrediction, PredictionStatus,
@@ -21,35 +26,175 @@ from .services.api_football import sync_world_cup_fixtures
 
 # ---------------------------------------------------------------------------
 # Fase de grupos oficial del Mundial FIFA 2026 (formato 48 equipos, 12 grupos).
-# Datos "quemados" para una demo autocontenida: cada grupo tiene 4 selecciones
-# que el modelo conoce, con la jornada 1 ya jugada (resultados) y el resto por
-# jugar (cuotas). Esto habilita además la simulación de campeón (Monte Carlo).
+# Datos REALES verificados (fuente: Wikipedia, "2026 FIFA World Cup"): las 3
+# jornadas de cada grupo con sus marcadores reales (todas 'finished'). Las
+# eliminatorias reales se cargan aparte (KNOCKOUT_FIXTURES). Esto mantiene la
+# simulación de campeón (Monte Carlo) sobre los grupos ya disputados.
 # ---------------------------------------------------------------------------
 GROUPS_2026: dict[str, list[str]] = {
-    "a": ["Mexico", "Croatia", "Ecuador", "New Zealand"],
-    "b": ["Canada", "Morocco", "Japan", "Jordan"],
-    "c": ["United States", "Uruguay", "Egypt", "Uzbekistan"],
-    "d": ["Argentina", "Denmark", "South Korea", "Panama"],
-    "e": ["France", "Senegal", "Poland", "Costa Rica"],
-    "f": ["Brazil", "Switzerland", "Ghana", "Saudi Arabia"],
-    "g": ["Spain", "Colombia", "Iran", "Norway"],
-    "h": ["England", "Serbia", "Cameroon", "Peru"],
-    "i": ["Portugal", "Sweden", "Nigeria", "Paraguay"],
-    "j": ["Germany", "Turkey", "Australia", "Chile"],
-    "k": ["Netherlands", "Austria", "Scotland", "Wales"],
-    "l": ["Italy", "Belgium", "Ukraine", "Czech Republic"],
+    "a": ["Mexico", "South Africa", "South Korea", "Czech Republic"],
+    "b": ["Canada", "Switzerland", "Bosnia and Herzegovina", "Qatar"],
+    "c": ["Brazil", "Morocco", "Scotland", "Haiti"],
+    "d": ["United States", "Australia", "Paraguay", "Turkey"],
+    "e": ["Germany", "Ivory Coast", "Ecuador", "Curacao"],
+    "f": ["Netherlands", "Japan", "Sweden", "Tunisia"],
+    "g": ["Belgium", "Egypt", "Iran", "New Zealand"],
+    "h": ["Spain", "Cape Verde", "Uruguay", "Saudi Arabia"],
+    "i": ["France", "Norway", "Senegal", "Iraq"],
+    "j": ["Argentina", "Austria", "Algeria", "Jordan"],
+    "k": ["Portugal", "Colombia", "DR Congo", "Uzbekistan"],
+    "l": ["England", "Croatia", "Ghana", "Panama"],
 }
 
-# Calendario round-robin (método del círculo) para 4 equipos: (jornada, i, j).
-ROUND_ROBIN = [
-    (1, 0, 3), (1, 1, 2),
-    (2, 0, 2), (2, 3, 1),
-    (3, 0, 1), (3, 2, 3),
-]
+# Fixtures REALES de la fase de grupos del Mundial 2026 (fuente: Wikipedia,
+# "2026 FIFA World Cup"). Las 3 jornadas con sus marcadores reales verificados;
+# todas quedan 'finished'. Cada tupla:
+#   (jornada, local, visitante, goles_local, goles_visitante)
+REAL_FIXTURES: dict[str, list[tuple]] = {
+    "a": [
+        (1, "Mexico", "South Africa", 2, 0),
+        (1, "South Korea", "Czech Republic", 2, 1),
+        (2, "Czech Republic", "South Africa", 1, 1),
+        (2, "Mexico", "South Korea", 1, 0),
+        (3, "Czech Republic", "Mexico", 0, 3),
+        (3, "South Africa", "South Korea", 1, 0),
+    ],
+    "b": [
+        (1, "Canada", "Bosnia and Herzegovina", 1, 1),
+        (1, "Qatar", "Switzerland", 1, 1),
+        (2, "Switzerland", "Bosnia and Herzegovina", 4, 1),
+        (2, "Canada", "Qatar", 6, 0),
+        (3, "Switzerland", "Canada", 2, 1),
+        (3, "Bosnia and Herzegovina", "Qatar", 3, 1),
+    ],
+    "c": [
+        (1, "Brazil", "Morocco", 1, 1),
+        (1, "Haiti", "Scotland", 0, 1),
+        (2, "Scotland", "Morocco", 0, 1),
+        (2, "Brazil", "Haiti", 3, 0),
+        (3, "Scotland", "Brazil", 0, 3),
+        (3, "Morocco", "Haiti", 4, 2),
+    ],
+    "d": [
+        (1, "United States", "Paraguay", 4, 1),
+        (1, "Australia", "Turkey", 2, 0),
+        (2, "United States", "Australia", 2, 0),
+        (2, "Turkey", "Paraguay", 0, 1),
+        (3, "Turkey", "United States", 3, 2),
+        (3, "Paraguay", "Australia", 0, 0),
+    ],
+    "e": [
+        (1, "Germany", "Curacao", 7, 1),
+        (1, "Ivory Coast", "Ecuador", 1, 0),
+        (2, "Germany", "Ivory Coast", 2, 1),
+        (2, "Ecuador", "Curacao", 0, 0),
+        (3, "Curacao", "Ivory Coast", 0, 2),
+        (3, "Ecuador", "Germany", 2, 1),
+    ],
+    "f": [
+        (1, "Netherlands", "Japan", 2, 2),
+        (1, "Sweden", "Tunisia", 5, 1),
+        (2, "Netherlands", "Sweden", 5, 1),
+        (2, "Tunisia", "Japan", 0, 4),
+        (3, "Japan", "Sweden", 1, 1),
+        (3, "Tunisia", "Netherlands", 1, 3),
+    ],
+    "g": [
+        (1, "Belgium", "Egypt", 1, 1),
+        (1, "Iran", "New Zealand", 2, 2),
+        (2, "Belgium", "Iran", 0, 0),
+        (2, "New Zealand", "Egypt", 1, 3),
+        (3, "Egypt", "Iran", 1, 1),
+        (3, "New Zealand", "Belgium", 1, 5),
+    ],
+    "h": [
+        (1, "Spain", "Cape Verde", 0, 0),
+        (1, "Saudi Arabia", "Uruguay", 1, 1),
+        (2, "Spain", "Saudi Arabia", 4, 0),
+        (2, "Uruguay", "Cape Verde", 2, 2),
+        (3, "Cape Verde", "Saudi Arabia", 0, 0),
+        (3, "Uruguay", "Spain", 0, 1),
+    ],
+    "i": [
+        (1, "France", "Senegal", 3, 1),
+        (1, "Iraq", "Norway", 1, 4),
+        (2, "France", "Iraq", 3, 0),
+        (2, "Norway", "Senegal", 3, 2),
+        (3, "Norway", "France", 1, 4),
+        (3, "Senegal", "Iraq", 5, 0),
+    ],
+    "j": [
+        (1, "Argentina", "Algeria", 3, 0),
+        (1, "Austria", "Jordan", 3, 1),
+        (2, "Argentina", "Austria", 2, 0),
+        (2, "Jordan", "Algeria", 1, 2),
+        (3, "Algeria", "Austria", 3, 3),
+        (3, "Jordan", "Argentina", 1, 3),
+    ],
+    "k": [
+        (1, "Portugal", "DR Congo", 1, 1),
+        (1, "Uzbekistan", "Colombia", 1, 3),
+        (2, "Portugal", "Uzbekistan", 5, 0),
+        (2, "Colombia", "DR Congo", 1, 0),
+        (3, "Colombia", "Portugal", 0, 0),
+        (3, "DR Congo", "Uzbekistan", 3, 1),
+    ],
+    "l": [
+        (1, "England", "Croatia", 4, 2),
+        (1, "Ghana", "Panama", 1, 0),
+        (2, "England", "Ghana", 0, 0),
+        (2, "Panama", "Croatia", 0, 1),
+        (3, "Panama", "England", 0, 2),
+        (3, "Croatia", "Ghana", 2, 1),
+    ],
+}
 
-# Marcadores plausibles y deterministas para la jornada ya jugada.
-DEMO_SCORES = [(2, 1), (1, 0), (0, 0), (3, 1), (2, 0), (1, 1),
-               (2, 2), (0, 1), (3, 0), (1, 2), (2, 3), (0, 2)]
+# Fase eliminatoria REAL del Mundial 2026 (fuente: Wikipedia). Cada tupla:
+#   (fase, local, visitante, goles_local|None, goles_visitante|None)
+# En la demo TODAS empiezan 'scheduled' (apostables); el marcador aquí es el
+# resultado REAL que se revela al "jugar"/simular la fase desde el panel admin.
+# Los partidos definidos por penales/prórroga guardan el marcador del tiempo
+# jugado (el ganador por penales avanza en la realidad). Tercer puesto y final
+# aún no se han disputado (None): su resultado se simula con el modelo.
+KNOCKOUT_FIXTURES: list[tuple] = [
+    # Dieciseisavos de final (round_32)
+    ("round_32", "South Africa", "Canada", 0, 1),
+    ("round_32", "Brazil", "Japan", 2, 1),
+    ("round_32", "Germany", "Paraguay", 1, 1),          # Paraguay 4-3 pen
+    ("round_32", "Netherlands", "Morocco", 1, 1),       # Morocco 3-2 pen
+    ("round_32", "Ivory Coast", "Norway", 1, 2),
+    ("round_32", "France", "Sweden", 3, 0),
+    ("round_32", "Mexico", "Ecuador", 2, 0),
+    ("round_32", "England", "DR Congo", 2, 1),
+    ("round_32", "Belgium", "Senegal", 3, 2),           # a.e.t.
+    ("round_32", "United States", "Bosnia and Herzegovina", 2, 0),
+    ("round_32", "Spain", "Austria", 3, 0),
+    ("round_32", "Portugal", "Croatia", 2, 1),
+    ("round_32", "Switzerland", "Algeria", 2, 0),
+    ("round_32", "Australia", "Egypt", 1, 1),           # Egypt 4-2 pen
+    ("round_32", "Argentina", "Cape Verde", 3, 2),      # a.e.t.
+    ("round_32", "Colombia", "Ghana", 1, 0),
+    # Octavos de final (round_16)
+    ("round_16", "Canada", "Morocco", 0, 3),
+    ("round_16", "Paraguay", "France", 0, 1),
+    ("round_16", "Brazil", "Norway", 1, 2),
+    ("round_16", "Mexico", "England", 2, 3),
+    ("round_16", "Portugal", "Spain", 0, 1),
+    ("round_16", "United States", "Belgium", 1, 4),
+    ("round_16", "Argentina", "Egypt", 3, 2),
+    ("round_16", "Switzerland", "Colombia", 0, 0),      # Switzerland 4-3 pen
+    # Cuartos de final (quarter_final)
+    ("quarter_final", "France", "Morocco", 2, 0),
+    ("quarter_final", "Spain", "Belgium", 2, 1),
+    ("quarter_final", "Norway", "England", 1, 2),        # a.e.t.
+    ("quarter_final", "Argentina", "Switzerland", 3, 1), # a.e.t.
+    # Semifinales (semi_final)
+    ("semi_final", "France", "Spain", 0, 2),
+    ("semi_final", "England", "Argentina", 1, 2),
+    # Tercer puesto y final: aún por jugarse (apostables)
+    ("third_place", "France", "England", None, None),
+    ("final", "Spain", "Argentina", None, None),
+]
 
 # Usuarios de demo para que el ranking se vea vivo (contraseña común de demo).
 DEMO_USERS = [
@@ -72,6 +217,23 @@ DEMO_BET_TEMPLATES = [
     ("ou_2.5", "under", 110, 1.90),
     ("1x2", "draw", 60, 3.10),
 ]
+
+
+# Orden global de ronda para el desbloqueo progresivo. Grupos: la ronda = la
+# jornada (1,2,3). Eliminatorias en orden real. La final es la última.
+KO_ROUND_ORDER: dict[str, int] = {
+    "round_32": 4, "round_16": 5, "quarter_final": 6,
+    "semi_final": 7, "third_place": 8, "final": 9,
+}
+
+
+def future_kickoff(now: datetime, round_order: int, seq: int = 0):
+    """Kickoff en el FUTURO y ordenado por ronda. Usado tanto por el seed inicial
+    como por el reset del torneo: el backend rechaza apuestas si el kickoff ya
+    pasó, así que toda ronda por jugar (incluida la jornada 1) debe quedar a
+    futuro. `round_order` (1-9) separa las rondas por días; `seq` desempata dentro
+    de la ronda por horas para conservar el orden cronológico."""
+    return now + timedelta(days=round_order, hours=seq % 12)
 
 
 def _bet_won(market: str, selection: str, hg: int, ag: int) -> bool:
@@ -130,47 +292,102 @@ def _seed_demo_bets(db):
 
 
 def _build_group_stage(db):
-    """Crea las 72 fixtures de la fase de grupos (jornada 1 jugada, resto por jugar)."""
+    """Crea las fixtures del Mundial 2026 en estado "inicio del torneo desde cero".
+
+    La demo arranca en el PRIMER partido: TODO el torneo queda 'scheduled' y
+    apostable (jornada 1 incluida), con desbloqueo progresivo por ronda. Cada
+    partido guarda su resultado REAL en result_home/away_score (oculto): al
+    "jugar"/simular la ronda desde el panel admin se revela ese marcador
+    verídico, no uno aleatorio. Los kickoffs se programan a futuro (el backend
+    rechaza apuestas si el kickoff ya pasó) conservando el orden por ronda.
+    """
     now = datetime.now(timezone.utc)
-    past = now - timedelta(days=6)   # jornada 1 (jugada)
-    future = now + timedelta(days=1)  # jornadas 2 y 3 (por jugar)
-    score_i = 0
     idx = 0
-    for letter, teams in GROUPS_2026.items():
-        for md, i, j in ROUND_ROBIN:
-            home, away = teams[i], teams[j]
-            ext = f"demo-g{letter}-md{md}-{i}{j}"
+
+    # Fase de grupos: las 3 jornadas por jugar (apostables) con su resultado real
+    # guardado. round_order = jornada (1, 2, 3).
+    for letter, matches in REAL_FIXTURES.items():
+        for gi, (md, home, away, hg, ag) in enumerate(matches):
+            ext = f"wc2026-g{letter}-{gi}"
             if db.query(Fixture).filter(Fixture.external_id == ext).first():
                 continue
-            if md == 1:
-                gh, ga = DEMO_SCORES[score_i % len(DEMO_SCORES)]
-                score_i += 1
-                db.add(Fixture(
-                    external_id=ext, stage=f"group_{letter}", home_team=home, away_team=away,
-                    kickoff_utc=past + timedelta(hours=idx), neutral=True,
-                    status=FixtureStatus.finished, home_score=gh, away_score=ga,
-                ))
-            else:
-                db.add(Fixture(
-                    external_id=ext, stage=f"group_{letter}", home_team=home, away_team=away,
-                    kickoff_utc=future + timedelta(hours=idx), neutral=True,
-                    status=FixtureStatus.scheduled,
-                ))
+            db.add(Fixture(
+                external_id=ext, stage=f"group_{letter}", home_team=home, away_team=away,
+                kickoff_utc=future_kickoff(now, md, idx), neutral=True,
+                status=FixtureStatus.scheduled, round_order=md,
+                result_home_score=hg, result_away_score=ag,
+            ))
             idx += 1
 
+    # Eliminatorias: todas por jugar (apostables), con su resultado real guardado
+    # cuando ya se conoce. Tercer puesto y final aún no se disputan (result None).
+    for ki, (stage, home, away, hg, ag) in enumerate(KNOCKOUT_FIXTURES):
+        ext = f"wc2026-ko-{ki}"
+        if db.query(Fixture).filter(Fixture.external_id == ext).first():
+            continue
+        ro = KO_ROUND_ORDER[stage]
+        db.add(Fixture(
+            external_id=ext, stage=stage, home_team=home, away_team=away,
+            kickoff_utc=future_kickoff(now, ro, ki), neutral=True,
+            status=FixtureStatus.scheduled, round_order=ro,
+            result_home_score=hg, result_away_score=ag,
+        ))
+
+
+
+def _ensure_schema():
+    """Mini-migración idempotente (no hay Alembic activo): agrega la columna
+    'nickname' a bases ya existentes, que create_all no altera.
+
+    Comprueba primero si la columna falta (lectura que cualquier rol puede
+    hacer). Si falta e intenta aplicarla pero NO puede (p.ej. la tabla es de
+    otro dueño y el rol de la app es de mínimo privilegio, sin permiso ALTER),
+    deja un ERROR claro en el log en vez de fallar en silencio y crashear
+    después. En Railway el rol del backend es dueño de la base -> aplica bien.
+    En compose local con app_runtime (no-owner) la columna debe crearla el
+    dueño: recrear el volumen (docker compose down -v) o ejecutar como 'app':
+      ALTER TABLE users ADD COLUMN nickname VARCHAR(30);
+      CREATE UNIQUE INDEX ix_users_nickname ON users (nickname);
+    """
+    cols = {c["name"] for c in inspect(engine).get_columns("users")}
+    if "nickname" in cols:
+        return  # ya migrada (o base fresca creada por create_all)
+
+    stmts = [
+        "ALTER TABLE users ADD COLUMN nickname VARCHAR(30)",
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_nickname ON users (nickname)",
+    ]
+    for s in stmts:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(s))
+        except Exception as e:
+            logger.error(
+                "No se pudo aplicar la migración de 'nickname' (%s). La columna "
+                "debe crearla el DUEÑO de la tabla (recrea el volumen con "
+                "'docker compose down -v', o ejecútala manualmente como 'app').",
+                e,
+            )
+            return
 
 
 def main():
     Base.metadata.create_all(engine)
+    _ensure_schema()
     db = SessionLocal()
     try:
-        # admin (solo si no existe)
+        # admin (solo si no existe). Nickname fijo "Admin" para el ranking.
         admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-        if not db.query(User).filter(User.email == admin_email).first():
+        admin_user = db.query(User).filter(User.email == admin_email).first()
+        if not admin_user:
             pw = os.getenv("ADMIN_PASSWORD")
             if not pw:
                 raise SystemExit("define ADMIN_PASSWORD en el entorno para crear el admin")
-            db.add(User(email=admin_email, password_hash=hash_password(pw), role=Role.admin))
+            db.add(User(email=admin_email, nickname="Admin",
+                        password_hash=hash_password(pw), role=Role.admin))
+        elif not admin_user.nickname:
+            # Backfill: admin creado antes de existir los nicknames.
+            admin_user.nickname = "Admin"
 
         # equipos desde el modelo (si está cargado)
         inference.load()
@@ -200,7 +417,8 @@ def main():
             for email, balance in DEMO_USERS:
                 if not db.query(User).filter(User.email == email).first():
                     db.add(User(
-                        email=email, password_hash=demo_hash,
+                        email=email, nickname=email.split("@")[0].capitalize(),
+                        password_hash=demo_hash,
                         role=Role.user, points_balance=balance,
                     ))
             db.flush()  # asegura IDs de usuarios antes de crear su historial
@@ -208,6 +426,7 @@ def main():
 
         db.commit()
         print(f"seed ok: {db.query(Team).count()} equipos, {db.query(Fixture).count()} fixtures")
+
     finally:
         db.close()
 

@@ -56,11 +56,9 @@ services:
       - public-net
     ports:
       - "${BACKEND_PORT:-8080}:8000"
-    # entrena modelo, siembra DB y arranca API
-    command: >
-      sh -c "python -m app.ml.train &&
-             python -m app.seed &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-server-header"
+    # entrena modelo (solo si falta), siembra DB y arranca API -- ver start.sh.
+    # Reutiliza el modelo del volumen model-data en reinicios (arranque rápido).
+    command: ["./start.sh"]
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
@@ -88,6 +86,9 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8080}
+        # Cuentas demo ocultas por defecto (seguro). Para mostrarlas en local,
+        # exporta DEMO_ACCOUNTS=1 antes de construir.
+        NEXT_PUBLIC_DEMO_ACCOUNTS: ${DEMO_ACCOUNTS:-0}
     environment:
       BACKEND_URL: http://backend:8000
     depends_on:

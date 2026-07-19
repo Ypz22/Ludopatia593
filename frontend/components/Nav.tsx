@@ -13,18 +13,21 @@ const LINKS = [
 
 export default function Nav() {
   const [points, setPoints] = useState<number | null>(null);
-  const [authed, setAuthed] = useState(false);
-  const { authed: hasToken, initializing } = useSession();
+  const { authed, initializing } = useSession();
   const pathname = usePathname();
   const router = useRouter();
 
   const refresh = useCallback(() => {
     if (initializing) return;
-    if (!hasToken) { setAuthed(false); setPoints(null); return; }
-    api.me().then((u) => { setPoints(u.points_balance); setAuthed(true); }).catch(() => {
-      setAuthed(false); setPoints(null);
-    });
-  }, [hasToken, initializing]);
+    if (!authed) {
+      setPoints(null);
+      return;
+    }
+    api
+      .me()
+      .then((u) => setPoints(u.points_balance))
+      .catch(() => setPoints(null));
+  }, [authed, initializing]);
 
   useEffect(() => {
     refresh();
@@ -33,24 +36,34 @@ export default function Nav() {
     return () => window.removeEventListener("balance:refresh", h);
   }, [refresh]);
 
-  const isActive = (href: string) => pathname === href || (href !== "/" && pathname?.startsWith(href));
+  const isActive = (href: string) =>
+    pathname === href || (href !== "/" && pathname?.startsWith(href));
 
   return (
     <header className="topbar">
       <div className="topbar-inner">
         <Link href="/" className="brand">
           <span className="logo">⚽</span>
-          <span>Predictor<span className="accent">26</span></span>
+          <span>
+            Ludopatia <span className="accent">593</span>
+          </span>
         </Link>
 
         <nav className="navlinks">
           {LINKS.map((l) => (
-            <Link key={l.href} href={l.href} className={`navlink ${isActive(l.href) ? "active" : ""}`}>
+            <Link
+              key={l.href}
+              href={l.href}
+              className={`navlink ${isActive(l.href) ? "active" : ""}`}
+            >
               {l.label}
             </Link>
           ))}
           {authed && (
-            <Link href="/bets" className={`navlink ${isActive("/bets") ? "active" : ""}`}>
+            <Link
+              href="/bets"
+              className={`navlink ${isActive("/bets") ? "active" : ""}`}
+            >
               Mis apuestas
             </Link>
           )}
@@ -61,17 +74,24 @@ export default function Nav() {
             <>
               <span className="balance-chip">
                 <span className="coin">◈</span>
-                {points ?? "…"}<small>pts</small>
+                {points ?? "…"}
+                <small>pts</small>
               </span>
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => { api.logout().finally(() => { setAuthed(false); router.push("/login"); }); }}
+                onClick={() => {
+                  api.logout().finally(() => {
+                    router.push("/login");
+                  });
+                }}
               >
                 Salir
               </button>
             </>
           ) : (
-            <Link href="/login" className="btn btn-primary btn-sm">Entrar</Link>
+            <Link href="/login" className="btn btn-primary btn-sm">
+              Entrar
+            </Link>
           )}
         </div>
       </div>

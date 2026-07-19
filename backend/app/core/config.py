@@ -27,10 +27,18 @@ class Settings(BaseSettings):
     # global, estos endpoints tienen uno propio más estricto porque su abuso
     # tiene un costo específico (creación masiva de cuentas, farming de
     # puntos, carga sobre operaciones admin) que el límite global no acota.
-    rate_limit_per_min: int = 60
+    rate_limit_per_min: int = 120
     login_rate_limit_per_min: int = 5
+    # Ventana del límite de login: tras 5 intentos se bloquea por este tiempo
+    # (30 min) -- defensa fuerte contra fuerza bruta. El frontend usa el
+    # Retry-After (= este valor) para la cuenta regresiva del botón "Entrar".
+    login_lockout_seconds: int = 1800
     register_rate_limit_per_min: int = 8
-    bets_rate_limit_per_min: int = 20
+    # El boleto se envía en paralelo (una petición POST /v1/bets por selección),
+    # así que un boleto grande + algún reintento puede superar un límite bajo en la
+    # misma ventana de 60s. 60/min da holgura para un boleto de ~15 apuestas sin
+    # dejar de acotar el abuso (farming de puntos por scripting).
+    bets_rate_limit_per_min: int = 60
     admin_rate_limit_per_min: int = 30
 
     # football-data.org. Vacío => ETL usa dataset local.
