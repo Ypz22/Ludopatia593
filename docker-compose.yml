@@ -56,11 +56,9 @@ services:
       - public-net
     ports:
       - "${BACKEND_PORT:-8080}:8000"
-    # entrena modelo, siembra DB y arranca API
-    command: >
-      sh -c "python -m app.ml.train &&
-             python -m app.seed &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-server-header"
+    # entrena modelo (solo si falta), siembra DB y arranca API -- ver start.sh.
+    # Reutiliza el modelo del volumen model-data en reinicios (arranque rápido).
+    command: ["./start.sh"]
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
