@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import settings
 from .core.logging import configure_logging
-from .core.ratelimit import allow
+from .core.ratelimit import allow, client_ip
 from .ml.inference import inference
 from .api import auth, predictions, bets, admin, leaderboard
 
@@ -78,7 +78,7 @@ async def security_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
 
     # Preflight CORS (OPTIONS): no debe consumir cuota ni bloquearse por rate
     # limit. Si se le responde 429 (sin cabeceras CORS), el navegador reporta
@@ -151,6 +151,35 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
 )
+
+
+@app.middleware("http")
+async def unhandled_exception_middleware(request: Request, call_next):
+    # Starlette maneja las excepciones no capturadas en ServerErrorMiddleware,
+    # que envuelve a TODO -- incluido CORSMiddleware -- por fuera. Un
+    # @app.exception_handler(Exception) tampoco sirve: Starlette lo mueve a
+    # ese mismo ServerErrorMiddleware (build_middleware_stack trata la clase
+    # Exception como caso especial), así que la respuesta de error igual
+    # sale sin pasar por CORS y el navegador la reporta como "bloqueado por
+    # CORS" en vez de mostrar el 500 real (p.ej. KeyError de equipo no
+    # reconocido por el modelo). Atajar la excepción acá, en un middleware
+    # registrado DESPUÉS de CORSMiddleware (más cerca del router), hace que
+    # la respuesta sí atraviese CORSMiddleware de vuelta y llegue con los
+    # headers correctos.
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception(
+            "excepción no manejada",
+            extra={"http": {
+                "request_id": getattr(request.state, "request_id", None),
+                "path": request.url.path,
+            }},
+        )
+        return JSONResponse(
+            {"detail": "error interno"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 app.include_router(auth.router)

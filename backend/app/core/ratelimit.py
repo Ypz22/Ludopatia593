@@ -47,6 +47,26 @@ def get_redis():
     return _r
 
 
+def client_ip(request: Request) -> str:
+    """IP estable del cliente detrás de Railway/proxies.
+
+    `request.client.host` en Railway suele ser una IP interna del proxy
+    (100.64.x.x) y puede cambiar entre requests. Para rate limiting necesitamos
+    la IP original que el proxy envía en X-Forwarded-For.
+    """
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        ip = forwarded_for.split(",", 1)[0].strip()
+        if ip:
+            return ip
+
+    real_ip = request.headers.get("x-real-ip", "").strip()
+    if real_ip:
+        return real_ip
+
+    return request.client.host if request.client else "unknown"
+
+
 def allow(key: str, limit: int, window_sec: int = 60) -> bool:
     """True si la acción está permitida; False si excede el límite."""
     global _r, _last_reconnect, _warned_fallback
@@ -85,7 +105,7 @@ def rate_limit_dep(key_prefix: str, limit: int) -> Callable[[Request], None]:
     `key_prefix`. Se instancia una vez por ruta/router (`Depends(rate_limit_dep(...))`)
     -- no confundir con `allow()`, que es la primitiva de bajo nivel."""
     def _dep(request: Request) -> None:
-        ip = request.client.host if request.client else "unknown"
+        ip = client_ip(request)
         if not allow(f"{key_prefix}:{ip}", limit):
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "demasiadas peticiones")
     return _dep

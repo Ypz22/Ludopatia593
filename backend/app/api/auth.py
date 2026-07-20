@@ -27,7 +27,7 @@ from ..core.security import (
     create_access_token, create_refresh_token, decode_token,
 )
 from ..core.config import settings
-from ..core.ratelimit import allow, rate_limit_dep
+from ..core.ratelimit import allow, client_ip, rate_limit_dep
 from ..db.session import get_db
 from ..db.models import User, RefreshToken, Role, AuditLog
 from ..schemas.schemas import RegisterIn, LoginIn, TokenOut, UserOut, SessionOut
@@ -131,7 +131,7 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenOut)
 def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
     if not allow(f"login:{ip}", settings.login_rate_limit_per_min,
                  window_sec=settings.login_lockout_seconds):
         # Retry-After = ventana de bloqueo (30 min) -> el frontend lo usa para la

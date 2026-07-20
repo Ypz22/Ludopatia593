@@ -4,7 +4,18 @@ from __future__ import annotations
 import pytest
 
 from app.core import ratelimit
-from app.core.ratelimit import allow
+from app.core.ratelimit import allow, client_ip
+
+
+class _Headers(dict):
+    def get(self, key, default=None):
+        return super().get(key.lower(), default)
+
+
+class _Request:
+    def __init__(self, headers=None, host="127.0.0.1"):
+        self.headers = _Headers({k.lower(): v for k, v in (headers or {}).items()})
+        self.client = type("Client", (), {"host": host})()
 
 
 @pytest.fixture(autouse=True)
@@ -36,3 +47,16 @@ def test_old_hits_expire_out_of_window():
     ratelimit._mem[key] = [ratelimit.time.time() - 120]
     # Ese hit viejo no cuenta -> con limit=1 la nueva petición pasa.
     assert allow(key, limit=1) is True
+
+
+def test_client_ip_prefers_first_forwarded_for_value():
+    req = _Request(
+        headers={"X-Forwarded-For": "203.0.113.10, 100.64.0.17"},
+        host="100.64.0.99",
+    )
+    assert client_ip(req) == "203.0.113.10"
+
+
+def test_client_ip_falls_back_to_request_client_host():
+    req = _Request(host="100.64.0.17")
+    assert client_ip(req) == "100.64.0.17"

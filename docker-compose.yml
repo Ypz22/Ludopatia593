@@ -46,6 +46,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?define ADMIN_PASSWORD}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     depends_on:
       db:
         condition: service_healthy
